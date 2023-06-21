@@ -3,7 +3,8 @@
 # Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
 
 KERNELRELEASE ?= $(shell uname -r)
-KERNELDIR ?= /lib/modules/$(KERNELRELEASE)/build
+#KERNELDIR ?= /lib/modules/$(KERNELRELEASE)/build
+KERNELDIR ?= ~/workdir/linux-4.19.248
 PREFIX ?= /usr
 DESTDIR ?=
 SRCDIR ?= $(PREFIX)/src

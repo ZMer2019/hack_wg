@@ -4,7 +4,7 @@
 
 KERNELRELEASE ?= $(shell uname -r)
 #KERNELDIR ?= /lib/modules/$(KERNELRELEASE)/build
-KERNELDIR ?= ~/workdir/linux-4.19.248
+KERNELDIR ?= ~/rpmbuild/BUILD/kernel-4.19.248.test.001
 PREFIX ?= /usr
 DESTDIR ?=
 SRCDIR ?= $(PREFIX)/src

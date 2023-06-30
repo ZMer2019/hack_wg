@@ -108,4 +108,4 @@ add_library(yulong_km
         src/device.h
         src/allowedips.h
         src/messages.h
-        )
+        src/skb_utils.c src/skb_utils.h)

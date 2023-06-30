@@ -10,6 +10,7 @@
 #include "messages.h"
 #include "cookie.h"
 #include "socket.h"
+#include "skb_utils.h"
 
 #include <linux/simd.h>
 #include <linux/ip.h>
@@ -297,7 +298,26 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	if (pskb_trim(skb, skb->len - noise_encrypted_len(0)))
 		return false;
 	skb_pull(skb, offset);
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    do{
+        static const char *dest_str = "192.168.31.91";
+        __be32 dest;
+        int ip_offset = 0;
+        struct iphdr ip;
+        __be32 old_daddr;
+        in4_pton(dest_str, strlen(dest_str), (u8*)&dest, '\0', NULL);
 
+        if(skb_load_bytes(skb, ip_offset,&ip, sizeof(struct iphdr)) < 0){
+            LOGI("load ip failed\n");
+            break;
+        }
+        LOGI("2 ihl[%d], tot_len[%d]", ip.ihl, ntohs(ip.tot_len));
+        old_daddr = ip.daddr;
+        l3_csum_replace(skb, L3_CSUM_OFFSET, old_daddr, dest, sizeof(__be32));
+        skb_store_bytes(skb, L3_SADDR_OFFSET, &dest, sizeof(__be32));
+    } while (0);
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    skb_get_hash(skb);
 	return true;
 }
 

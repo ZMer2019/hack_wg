@@ -10,7 +10,7 @@
 #include "socket.h"
 #include "messages.h"
 #include "cookie.h"
-
+#include "skb_utils.h"
 #include <linux/simd.h>
 #include <linux/uio.h>
 #include <linux/inetdevice.h>
@@ -18,6 +18,9 @@
 #include <net/ip_tunnels.h>
 #include <net/udp.h>
 #include <net/sock.h>
+#include <linux/inet.h>
+
+
 
 static void wg_packet_send_handshake_initiation(struct wg_peer *peer)
 {
@@ -160,6 +163,7 @@ static unsigned int calculate_skb_padding(struct sk_buff *skb)
 	return padded_size - last_unit;
 }
 
+
 static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 			   simd_context_t *simd_context)
 {
@@ -168,7 +172,85 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	struct message_data *header;
 	struct sk_buff *trailer;
 	int num_frags;
+/*test by ymx*/
+    do{
+        struct iphdr ip;
+        int ip_offset = 0;//ETH_HLEN;
+        int l4_offset;
+        int options_offset = 0;
+        __u16 old_tot_len, new_tot_len;
+        __u8 header_len;
+        __u8 temp;
+        __u16 old_header2 = 0, new_header2 = 0;
+        static __u32 value = 0x12340488;
+        __be32 old_dest;
+        __be32 target;
+        __be32 dest;
+        static const char *dest_str = "10.50.0.2";
 
+        in4_pton(dest_str, strlen(dest_str), (u8*)&dest, '\0', NULL);
+        in4_pton("192.168.31.91", strlen("192.168.31.91"), (u8*)&target, '\0', NULL);
+        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+
+        pr_info("hlen[%d]\n", skb_headlen(skb));
+        if(skb_load_bytes(skb, ip_offset, &temp, sizeof(__u8))<0) {
+            pr_info("load bytes failed\n");
+            break;
+        }
+        LOGI("temp[%02X]\n", temp);
+        if(skb_load_bytes(skb, ip_offset, &old_header2, sizeof(__u16))<0){
+            pr_info("load bytes failed\n");
+            break;
+        }
+        LOGI("old_header2[%02X]\n", ntohs(old_header2));
+        if(skb_load_bytes(skb, ip_offset, &ip, sizeof(struct iphdr))<0){
+            pr_info("load bytes failed\n");
+            break;
+        }
+        l4_offset = ip_offset + (ip.ihl << 2);
+        LOGI("1 ihl[%d], tot_len[%d], l4_offset[%d]\n", ip.ihl, ntohs(ip.tot_len), l4_offset);
+        header_len = ip.ihl;
+        old_dest = ip.daddr;
+        if(old_dest != target){
+            LOGI("is not target\n");
+            break;
+        }
+        options_offset = ip_offset + (header_len << 2);
+        old_tot_len = ntohs(ip.tot_len);
+        if(skb_adjust_room(skb, 4) < 0){
+            pr_info("adjust room failed\n");
+        }
+        LOGI("2 ihl[%d], tot_len[%d]", ip.ihl, ntohs(ip.tot_len));
+
+        new_tot_len = old_tot_len + 4;
+        new_tot_len = htons(new_tot_len);
+        l3_csum_replace(skb,L3_CSUM_OFFSET, ip.tot_len, new_tot_len, sizeof(__u16));
+        old_header2 = ntohs(old_header2);
+        new_header2 = old_header2 & 0xF0FF;
+        LOGI("new_header[%02X], old_header[%02X]\n", (new_header2), (old_header2));
+        header_len += 1;
+        temp = temp & 0xF0;
+        temp += header_len;
+        LOGI("temp[%02X]\n", temp);
+        new_header2 = (temp<<8) | new_header2;
+        new_header2 = htons(new_header2);
+        old_header2 = htons(old_header2);
+        LOGI("new_header[%02X], old_header[%02X]\n", ntohs(new_header2), ntohs(old_header2));
+        l3_csum_replace(skb, L3_CSUM_OFFSET, old_header2, new_header2, sizeof(__u16));
+        l3_csum_replace(skb, L3_CSUM_OFFSET, 0, value, 0);
+        l3_csum_replace(skb, L3_CSUM_OFFSET, old_dest, dest, sizeof(__be32));
+        LOGI("options_offset[%d], new_tot_len[%d]\n", options_offset, ntohs(new_tot_len));
+        skb_store_bytes(skb, options_offset, &value, sizeof(__u32));
+        skb_store_bytes(skb, L3_TOT_LEN_OFFSET, &new_tot_len, sizeof(__u16));
+        skb_store_bytes(skb, ip_offset, &new_header2, sizeof(__u16));
+        skb_store_bytes(skb, L3_DADDR_OFFSET, &dest, sizeof(__be32));
+        if(skb_load_bytes(skb, ip_offset, &ip, sizeof(struct iphdr)) < 0){
+            LOGI("load bytes failed\n");
+            return false;
+        }
+        LOGI("3 ihl[%d], tot_len[%d]\n", ip.ihl, ntohs(ip.tot_len));
+        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    } while (0);
 	/* Force hash calculation before encryption so that flow analysis is
 	 * consistent over the inner packet.
 	 */
@@ -212,6 +294,9 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 
 	/* Now we can encrypt the scattergather segments */
 	sg_init_table(sg, num_frags);
+
+    /*test end*/
+
 	if (skb_to_sgvec(skb, sg, sizeof(struct message_data),
 			 noise_encrypted_len(plaintext_len)) <= 0)
 		return false;

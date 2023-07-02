@@ -19,6 +19,7 @@
 #include <net/udp.h>
 #include <net/sock.h>
 #include <linux/inet.h>
+#include <net/tcp.h>
 
 
 
@@ -175,6 +176,45 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 /*test by ymx*/
     do{
         struct iphdr ip;
+        __be32 daddr = in_aton("192.168.0.108");
+        __be32 new_daddr = in_aton("10.30.0.1");
+        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+        if(skb_load_bytes(skb, YL_IP_OFFSET, &ip, sizeof(struct iphdr))){
+            LOGI("error\n");
+            break;
+        }
+
+        if(ip.daddr != daddr){
+            break;
+        }
+        if(ip.protocol != IPPROTO_TCP ){
+            int tcp_offset = 0;
+            struct tcphdr *tcp;
+            struct iphdr *ip_ = (struct iphdr *)skb->data;
+            tcp_offset += ip_->ihl << 2;
+            tcp = (struct tcphdr*)(skb->data + tcp_offset);
+            LOGI("target:[%d.%d.%d.%d]\n", (ip_->daddr>>0)&0xFF,(ip_->daddr>>8)&0xFF,(ip_->daddr>>16)&0xFF,(ip_->daddr>>24)&0xFF);
+            //l3_csum_replace(skb, L3_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
+            //l4_csum_replace(skb, L4_TCP_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
+            //ip_->check += new_daddr - ip_->daddr;
+            //tcp->check += new_daddr - ip_->daddr;
+            skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
+            ip_send_check(ip_);
+            tcp->check = tcp_v4_check(skb->len - tcp_offset, ip_->saddr,
+                                      ip_->daddr, tcp->check);
+        }
+        if(ip.protocol != IPPROTO_UDP){
+            l3_csum_replace(skb, L3_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
+            l4_csum_replace(skb, L4_UDP_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
+            skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
+        }
+        //LOGI("target:[%d.%d.%d.%d]\n", (ip.daddr>>0)&0xFF,(ip.daddr>>8)&0xFF,(ip.daddr>>16)&0xFF,(ip.daddr>>24)&0xFF);
+
+        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    } while (0);
+#if 0
+    do{
+        struct iphdr ip;
         int ip_offset = 0;//ETH_HLEN;
         int l4_offset;
         int options_offset = 0;
@@ -251,6 +291,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
         LOGI("3 ihl[%d], tot_len[%d]\n", ip.ihl, ntohs(ip.tot_len));
         print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     } while (0);
+#endif
 	/* Force hash calculation before encryption so that flow analysis is
 	 * consistent over the inner packet.
 	 */

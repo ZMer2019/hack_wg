@@ -17,6 +17,7 @@
 #include <linux/ipv6.h>
 #include <linux/udp.h>
 #include <net/ip_tunnels.h>
+#include <net/tcp.h>
 
 /* Must be called with bh disabled. */
 static void update_rx_stats(struct wg_peer *peer, size_t len)
@@ -298,26 +299,46 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	if (pskb_trim(skb, skb->len - noise_encrypted_len(0)))
 		return false;
 	skb_pull(skb, offset);
+#if 1
     print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     do{
-        static const char *dest_str = "192.168.31.91";
-        __be32 dest;
+        static const char *dest_str = "192.168.0.108";
+        __be32 new_daddr;
         int ip_offset = 0;
         struct iphdr ip;
-        __be32 old_daddr;
-        in4_pton(dest_str, strlen(dest_str), (u8*)&dest, '\0', NULL);
+        __be32 daddr;
+        in4_pton(dest_str, strlen(dest_str), (u8*)&new_daddr, '\0', NULL);
 
         if(skb_load_bytes(skb, ip_offset,&ip, sizeof(struct iphdr)) < 0){
             LOGI("load ip failed\n");
             break;
         }
-        LOGI("2 ihl[%d], tot_len[%d]", ip.ihl, ntohs(ip.tot_len));
-        old_daddr = ip.daddr;
-        l3_csum_replace(skb, L3_CSUM_OFFSET, old_daddr, dest, sizeof(__be32));
-        skb_store_bytes(skb, L3_SADDR_OFFSET, &dest, sizeof(__be32));
+        daddr = ip.daddr;
+        if(ip.protocol == IPPROTO_TCP){
+            int tcp_offset = 0;
+            struct tcphdr *tcp;
+            struct iphdr *ip_ = (struct iphdr *)skb->data;
+            tcp_offset += ip_->ihl << 2;
+            tcp = (struct tcphdr*)(skb->data + tcp_offset);
+            LOGI("target:[%d.%d.%d.%d]\n", (ip_->daddr>>0)&0xFF,(ip_->daddr>>8)&0xFF,(ip_->daddr>>16)&0xFF,(ip_->daddr>>24)&0xFF);
+
+            //l3_csum_replace(skb, L3_CSUM_OFFSET, daddr, new_addr, sizeof(__be32));
+            //l4_csum_replace(skb, L4_TCP_CSUM_OFFSET, daddr, new_addr, sizeof(__be32));
+            skb_store_bytes(skb, L3_SADDR_OFFSET, &new_daddr, sizeof(__be32));
+            ip_send_check(ip_);
+            tcp->check = tcp_v4_check(skb->len - tcp_offset, ip_->saddr,
+                                      ip_->daddr, tcp->check);
+
+        }
+        if(ip.protocol == IPPROTO_UDP){
+            l3_csum_replace(skb, L3_CSUM_OFFSET, daddr, new_daddr, sizeof(__be32));
+            l4_csum_replace(skb, L4_UDP_CSUM_OFFSET, daddr, new_daddr, sizeof(__be32));
+            skb_store_bytes(skb, L3_SADDR_OFFSET, &new_daddr, sizeof(__be32));
+        }
+
     } while (0);
     print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-    skb_get_hash(skb);
+#endif
 	return true;
 }
 

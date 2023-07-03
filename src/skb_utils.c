@@ -249,3 +249,99 @@ void print_binary(const char *data, int len, const char *func, int line){
     pr_info("[%s:%d]len=%d, %s\n", func, line,len,tmp);
     kfree(tmp);
 }
+
+static __be32 package_opt_sid(u16 sid){
+    __be32 value;
+    struct opt_sid os;
+    os.type = IPOPT_SID;
+    os.length = 4;
+    os.sid = sid;
+    value = *(uint32_t*)&os;
+    value = htonl(value);
+    //LOGI("%02X\n", value);
+    return value;
+}
+
+bool add_ip_options(struct sk_buff *skb,int ip_offset, u16 sid, enum options_type type){
+    struct iphdr ip;
+    struct iphdr *ip_ptr = NULL;
+    int options_offset = 0;
+    uint16_t old_tot_len, new_tot_len;
+    uint8_t header_len, tmp;
+    uint16_t old_header, new_header;
+    __be32 old_daddr, new_daddr, target;
+    __be32 value = 0;
+    switch (type) {
+        case OPT_TYPE_SID:
+            value = package_opt_sid(sid);
+            break;
+        default:
+            break;
+    }
+    target = in_aton("192.168.31.47");
+    new_daddr = in_aton("10.50.0.2");
+    if(skb_load_bytes(skb, ip_offset, &tmp, sizeof(uint8_t)) < 0){
+        LOGI("load byte failed\n");
+        return false;
+    }
+    if(skb_load_bytes(skb, ip_offset, &old_header, sizeof(uint16_t)) < 0){
+        LOGI("load byte failed\n");
+        return false;
+    }
+    if(skb_load_bytes(skb, ip_offset, &ip, sizeof(struct iphdr)) < 0){
+        LOGI("load byte failed\n");
+        return false;
+    }
+    old_daddr = ip.daddr;
+    header_len = ip.ihl;
+    if(header_len == 6){
+        return true;
+    }
+    if(old_daddr != target){
+        return false;
+    }
+    options_offset = ip_offset + (header_len << 2);
+    old_tot_len = ntohs(ip.tot_len);
+    if(skb_adjust_room(skb, 4) < 0){
+        LOGI("extend room failed\n");
+        return false;
+    }
+    new_tot_len = old_tot_len + 4;
+    new_tot_len = htons(new_tot_len);
+    old_header = ntohs(old_header);
+    new_header = old_header & 0xF0FF;
+    header_len += 1;
+    tmp = tmp & 0xF0;
+    tmp += header_len;
+    new_header = (tmp << 8) | new_header;
+    new_header = htons(new_header);
+    old_header = htons(old_header);
+    skb_store_bytes(skb, options_offset, &value, sizeof(uint32_t));
+    skb_store_bytes(skb, L3_TOT_LEN_OFFSET, &new_tot_len, sizeof(uint16_t));
+    skb_store_bytes(skb, ip_offset, &new_header, sizeof(uint16_t));
+    skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
+    ip_ptr = (struct iphdr*)(skb->data + ip_offset);
+    ip_send_check(ip_ptr);
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    return true;
+}
+bool do_nat(struct sk_buff *skb){
+    struct iphdr *ip = (struct iphdr*)skb->data;
+    __be32 target = in_aton("192.168.31.47");
+    __be32 new_saddr = in_aton("10.50.0.2");
+    if(ip->protocol != IPPROTO_UDP && ip->protocol != IPPROTO_TCP){
+        return true;
+    }
+    if(ip->saddr == target){
+        skb_store_bytes(skb, L3_SADDR_OFFSET, &new_saddr, sizeof(__be32));
+        ip_send_check(ip);
+    }
+    return true;
+}
+static uint32_t virtual_local_ip;
+void set_virtual_local_ip(uint32_t local){
+    virtual_local_ip = local;
+}
+uint32_t get_virtual_local_ip(void){
+    return virtual_local_ip;
+}

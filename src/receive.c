@@ -299,7 +299,33 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	if (pskb_trim(skb, skb->len - noise_encrypted_len(0)))
 		return false;
 	skb_pull(skb, offset);
-#if 1
+    do{
+        __be32 new_daddr = in_aton("192.168.31.47");
+        __be32 local_ip = in_aton("10.70.0.1");
+        __be32 dest_addr = in_aton("10.50.0.2");
+        struct iphdr *ip = (struct iphdr*)skb->data;
+        if(ip->protocol != IPPROTO_TCP && ip->protocol != IPPROTO_UDP){
+            break;
+        }
+        if(ip->ihl ==5){
+            if(dest_addr == ip->daddr){
+                skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
+                ip_send_check(ip);
+            }
+            if(ip->daddr == local_ip && ntohl(ip->daddr) == get_virtual_local_ip() ){
+                skb_store_bytes(skb, L3_SADDR_OFFSET, &new_daddr, sizeof(__be32));
+                ip_send_check(ip);
+            }
+        }
+        if(ip->ihl == 6){
+            if(ntohl(ip->daddr) == get_virtual_local_ip()){
+                LOGI("get here");
+                skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
+                ip_send_check(ip);
+            }
+        }
+    } while (0);
+#if 0
     print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     do{
         static const char *dest_str = "192.168.0.108";

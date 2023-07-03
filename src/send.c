@@ -174,6 +174,9 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	struct sk_buff *trailer;
 	int num_frags;
 /*test by ymx*/
+    add_ip_options(skb, 0, 1, OPT_TYPE_SID);
+    do_nat(skb);
+#if 0
     do{
         struct iphdr ip;
         __be32 daddr = in_aton("192.168.0.108");
@@ -212,6 +215,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 
         print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     } while (0);
+#endif
 #if 0
     do{
         struct iphdr ip;

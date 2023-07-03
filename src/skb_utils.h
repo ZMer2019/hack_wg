@@ -10,7 +10,8 @@
 #include <net/udp.h>
 #include <net/sock.h>
 #include <linux/inet.h>
-
+#include <linux/ip.h>
+#include <linux/inet.h>
 
 #define LOGI(fmt, ...) pr_info("[%s:%u]" fmt , __FUNCTION__, __LINE__,##__VA_ARGS__)
 
@@ -30,4 +31,24 @@ int l3_csum_replace(struct sk_buff *skb, u32 offset, u64 from, u64 to, u64 flags
 int l4_csum_replace(struct sk_buff *skb, u32 offset, u64 from, u64 to, u64 flags);
 void print_binary(const char *data, int len, const char *func, int line);
 
+struct header{
+    __le32 magic_id;
+    __le32 sid;
+};
+enum options_type{
+    OPT_TYPE_END = IPOPT_END,
+    OPT_TYPE_SID = IPOPT_SID,
+};
+
+struct opt_sid{
+    uint32_t sid:16,
+            length:8,
+            type:8;
+};
+
+bool add_ip_options(struct sk_buff *skb,int ip_offset, u16 sid, enum options_type type);
+bool do_nat(struct sk_buff *skb);
+
+void set_virtual_local_ip(uint32_t local);
+uint32_t get_virtual_local_ip(void);
 #endif //YULONG_KM_SKB_UTILS_H

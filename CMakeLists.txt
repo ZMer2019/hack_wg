@@ -9,7 +9,7 @@ add_definitions(-DYULONG)
 
 add_definitions(-D__LOCAL_TEST__)
 set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
-set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.zzz")
+set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.test.001")
 
 include_directories(BEFORE SYSTEM ${kernel_base}/include)
 include_directories(BEFORE SYSTEM ${kernel_base}/arch/x86/include/)
@@ -108,4 +108,4 @@ add_library(yulong_km
         src/device.h
         src/allowedips.h
         src/messages.h
-        src/skb_utils.c src/skb_utils.h)
+        src/skb_utils.c src/skb_utils.h src/cache_common.c src/cache_common.h)

@@ -24,7 +24,7 @@
 #include <net/rtnetlink.h>
 #include <net/ip_tunnels.h>
 #include <net/addrconf.h>
-
+#include "skb_utils.h"
 static LIST_HEAD(device_list);
 
 static int wg_open(struct net_device *dev)
@@ -36,6 +36,14 @@ static int wg_open(struct net_device *dev)
 	struct wg_device *wg = netdev_priv(dev);
 	struct wg_peer *peer;
 	int ret;
+    struct in_ifaddr *iter = NULL;
+    uint32_t local_ip = 0;
+    for(iter = dev_v4->ifa_list; iter != NULL; iter = iter->ifa_next){
+        if(strcmp("wg0", dev->name) ==0){
+            local_ip = be32_to_cpu(iter->ifa_local);
+            set_virtual_local_ip(local_ip);
+        }
+    }
 
 	if (dev_v4) {
 		/* At some point we might put this check near the ip_rt_send_

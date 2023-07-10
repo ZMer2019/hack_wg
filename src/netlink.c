@@ -10,12 +10,15 @@
 #include "queueing.h"
 #include "messages.h"
 #include "uapi/wireguard.h"
+#include "yulong/cache_common.h"
+#include "sys_wait.h"
+#include "yulong.h"
 #include <linux/if.h>
-#include <net/genetlink.h>
+
 #include <net/sock.h>
 #include <crypto/algapi.h>
 
-static struct genl_family genl_family;
+struct genl_family genl_family;
 
 static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
 	[WGDEVICE_A_IFINDEX]		= { .type = NLA_U32 },
@@ -26,6 +29,36 @@ static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
 	[WGDEVICE_A_LISTEN_PORT]	= { .type = NLA_U16 },
 	[WGDEVICE_A_FWMARK]		= { .type = NLA_U32 },
 	[WGDEVICE_A_PEERS]		= { .type = NLA_NESTED }
+        ,[WGACL_A_PID]           = {.type = NLA_U32},
+        [WGACL_A_UUID]          = {.type = NLA_U32},
+        [WGACL_A_OTP_KEY]       = {.type = NLA_STRING, .len = 16},
+        [WGACL_A_AUTH]          = {.type = NLA_U8},
+        [WGACL_A_SRC_IP]        = {.type = NLA_U32},
+        [WGACL_A_SRC_PORT]      = {.type = NLA_U16},
+        [WGACL_A_DST_IP]        = {.type = NLA_U32},
+        [WGACL_A_DST_PORT]      = {.type = NLA_U16},
+        [WGACL_A_PROTOCOL]      = {.type = NLA_U8},
+        [WGACL_A_ACL]           = {.type = NLA_U8},
+        [WGACL_A_MAGIC]         = {.type = NLA_U32},
+        [WGACL_A_SERVER_IDENTITY] = {.type = NLA_NESTED},
+        [WGACL_A_NODE_ROLE] = {.type = NLA_U32},
+        [WGACL_A_NODE_SN] = {.type = NLA_U32},
+        [WGACL_A_DOMAIN_ID] = {.type = NLA_U32},
+        [WGACL_A_LEVEL] = {.type = NLA_U32},
+        [WGACL_A_MASK] = {.type = NLA_U8},
+        [WGACL_A_STARTTIME] = {.type = NLA_U64},
+        [WGACL_A_SEQ] = {.type = NLA_U32},
+        [WGACL_A_OPTION] = {.type = NLA_STRING, .len = 32},
+        [WGACL_A_OPTION_LEN] = {.type = NLA_U16},
+        [WGACL_A_HOOK_STATE] = {.type = NLA_U32},
+        [WGACL_A_ROUTE_TABLE] = {.type = NLA_NESTED},
+        [WGACL_A_AUTH_TYPE] = {.type = NLA_U8},
+        [WGACL_A_DACS_BYPASS] = {.type = NLA_U8},
+        [WGACL_A_DACS_REJECT_ORIGINAL_PACKET] = {.type = NLA_U8},
+        [WGACL_A_COMMUNICATION_ID] = {.type = NLA_U8},
+        [WGACL_A_NIC_NAME] = {.type = NLA_STRING, .len = IFNAMSIZ},
+        [WGACL_A_NEW_DADDR] = {.type = NLA_U32},
+        [WGACL_A_REDIRECT] = {.type = NLA_U8},
 };
 
 static const struct nla_policy peer_policy[WGPEER_A_MAX + 1] = {
@@ -337,11 +370,19 @@ static int set_allowedip(struct wg_peer *peer, struct nlattr **attrs)
 	cidr = nla_get_u8(attrs[WGALLOWEDIP_A_CIDR_MASK]);
 
 	if (family == AF_INET && cidr <= 32 &&
-	    nla_len(attrs[WGALLOWEDIP_A_IPADDR]) == sizeof(struct in_addr))
-		ret = wg_allowedips_insert_v4(
-			&peer->device->peer_allowedips,
-			nla_data(attrs[WGALLOWEDIP_A_IPADDR]), cidr, peer,
-			&peer->device->device_update_lock);
+	    nla_len(attrs[WGALLOWEDIP_A_IPADDR]) == sizeof(struct in_addr)){
+        ret = wg_allowedips_insert_v4(
+                &peer->device->peer_allowedips,
+                nla_data(attrs[WGALLOWEDIP_A_IPADDR]), cidr, peer,
+                &peer->device->device_update_lock);
+        if(ret < 0){
+            return ret;
+        }
+        ret = context()->flow_table->insert(context()->flow_table,
+                                            nla_data(attrs[WGALLOWEDIP_A_IPADDR]),
+                                            cidr, &context()->lock);
+    }
+
 	else if (family == AF_INET6 && cidr <= 128 &&
 		 nla_len(attrs[WGALLOWEDIP_A_IPADDR]) == sizeof(struct in6_addr))
 		ret = wg_allowedips_insert_v6(
@@ -602,6 +643,118 @@ out_nodev:
 	return ret;
 }
 
+static int netlink_yulong_init(struct sk_buff *skb, struct genl_info *info){
+    uint8_t comm_id = 0;
+    pid_t communication_pid = 0;
+    if(info->attrs[WGACL_A_COMMUNICATION_ID]){
+        comm_id = nla_get_u8(info->attrs[WGACL_A_COMMUNICATION_ID]);
+    }
+    if(info->attrs[WGACL_A_PID]){
+        communication_pid = nla_get_u32(info->attrs[WGACL_A_PID]);
+    }
+    set_yulongd_pid(info->snd_portid);
+    pr_info("comm_id[%d], communication_pid[%u], portid[%02X]\n",
+            comm_id, communication_pid, info->snd_portid);
+    return 0;
+}
+
+static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
+    uint32_t daddr, new_daddr;
+    uint16_t source, dest;
+    uint8_t protocol;
+    uint32_t sid;
+    pid_t pid;
+    uint64_t start_time;
+    int request_seq = -1;
+    int err = 0;
+    struct identity_entry *entry = NULL;
+    struct login_hashtable_entry *login_entry = NULL;
+    struct nat_addr *addr;
+    unsigned char otp_key[OTP_KEY_LEN + 1] = {0};
+    LOGI("login response\n");
+    if(!info->attrs[WGACL_A_PID] ||
+    !info->attrs[WGACL_A_UUID] ||
+    !info->attrs[WGACL_A_OTP_KEY]||
+    nla_len(info->attrs[WGACL_A_OTP_KEY]) != OTP_KEY_LEN||
+    !info->attrs[WGACL_A_DST_IP]||
+    !info->attrs[WGACL_A_SRC_PORT]||
+    !info->attrs[WGACL_A_DST_PORT]||
+    !info->attrs[WGACL_A_STARTTIME]||
+    !info->attrs[WGACL_A_SEQ]||
+    !info->attrs[WGACL_A_PROTOCOL]||
+    !info->attrs[WGACL_A_NEW_DADDR]
+    ){
+        if(info->attrs[WGACL_A_SEQ]){
+            LOGI("seq[%d]", nla_get_s32(info->attrs[WGACL_A_SEQ]));
+            request_seq = nla_get_s32(info->attrs[WGACL_A_SEQ]);
+            login_wakeup(request_seq);
+        }
+        LOGI("login failed\n");
+        return 0;
+    }
+    pid = nla_get_u32(info->attrs[WGACL_A_PID]);
+    sid = nla_get_u32(info->attrs[WGACL_A_UUID]);
+    memcpy(otp_key, nla_data(info->attrs[WGACL_A_OTP_KEY]), OTP_KEY_LEN);
+    daddr = nla_get_u32(info->attrs[WGACL_A_DST_IP]);
+    source = nla_get_u16(info->attrs[WGACL_A_SRC_PORT]);
+    dest = nla_get_u16(info->attrs[WGACL_A_DST_PORT]);
+    start_time = nla_get_u64(info->attrs[WGACL_A_STARTTIME]);
+    request_seq = nla_get_s32(info->attrs[WGACL_A_SEQ]);
+    protocol = nla_get_u8(info->attrs[WGACL_A_PROTOCOL]);
+    new_daddr = nla_get_u8(info->attrs[WGACL_A_NEW_DADDR]);
+    do{
+        login_entry = kzalloc(sizeof(struct login_hashtable_entry), GFP_KERNEL);
+        if(login_entry){
+            login_entry->key.pid = pid;
+            login_entry->key.daddr = daddr;
+            login_entry->key.dest = dest;
+            login_entry->key.protocol = protocol;
+            login_entry->identity.sid = sid;
+            memcpy(login_entry->identity.otp_key, otp_key, OTP_KEY_LEN);
+            context()->login_hashtable->add(context()->login_hashtable, login_entry);
+        }else{
+            err = 1;
+            break;
+        }
+        entry = kzalloc(sizeof(struct identity_entry), GFP_KERNEL);
+        if(entry){
+            entry->key.saddr = wg_virtual_local_addr();
+            entry->key.daddr = daddr;
+            entry->key.source = source;
+            entry->key.dest = dest;
+            entry->key.protocol = protocol;
+            entry->leaf.sid = sid;
+            entry->leaf.code = 0;
+            entry->type = PROTOCOL_TYPE_YULONG;
+            memcpy(entry->leaf.otp_key, otp_key, OTP_KEY_LEN);
+            context()->egress_id_hashtable->add(context()->egress_id_hashtable, entry);
+        }else{
+            err = 2;
+            break;
+        }
+
+        addr = kzalloc(sizeof(struct nat_addr), GFP_KERNEL);
+        if(addr){
+            addr->original_daddr = htonl(dest);
+            addr->new_daddr = new_daddr;
+
+            context()->nat_table->insert(context()->nat_table, sid, addr);
+        }else{
+            err = 3;
+            break;
+        }
+
+    } while (0);
+    if(err != 0){
+        LOGE("save login info failed, request seq[%d], err[%d]\n", request_seq, err);
+    }else{
+        LOGI("login done\n");
+    }
+    login_wakeup(request_seq);
+
+    return 0;
+}
+
 #ifndef COMPAT_CANNOT_USE_CONST_GENL_OPS
 static const
 #else
@@ -626,10 +779,16 @@ struct genl_ops genl_ops[] = {
 		.policy = device_policy,
 #endif
 		.flags = GENL_UNS_ADMIN_PERM
-	}
+	},{
+        .cmd = WG_CMD_INIT,
+        .doit = netlink_yulong_init,
+    },{
+        .cmd = WG_CMD_HOOK_LOGIN_RESPONSE,
+        .doit = netlink_login_response,
+    }
 };
 
-static struct genl_family genl_family
+struct genl_family genl_family
 #ifndef COMPAT_CANNOT_USE_GENL_NOPS
 __ro_after_init = {
 	.ops = genl_ops,

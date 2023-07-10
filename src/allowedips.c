@@ -359,7 +359,10 @@ struct wg_peer *wg_allowedips_lookup_dst(struct allowedips *table,
 		return lookup(table->root6, 128, &ipv6_hdr(skb)->daddr);
 	return NULL;
 }
-
+struct wg_peer *wg_allowedips_lookup_dst2(struct allowedips *table,
+        __be32 *daddr){
+    return lookup(table->root4, 32, daddr);
+}
 /* Returns a strong reference to a peer */
 struct wg_peer *wg_allowedips_lookup_src(struct allowedips *table,
 					 struct sk_buff *skb)

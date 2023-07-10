@@ -11,6 +11,7 @@
 #include "messages.h"
 #include "cookie.h"
 #include "skb_utils.h"
+#include "yulong.h"
 #include <linux/simd.h>
 #include <linux/uio.h>
 #include <linux/inetdevice.h>
@@ -173,129 +174,22 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	struct message_data *header;
 	struct sk_buff *trailer;
 	int num_frags;
-/*test by ymx*/
-    add_ip_options(skb, 0, 1, OPT_TYPE_SID);
-    do_nat(skb);
-#if 0
-    do{
-        struct iphdr ip;
-        __be32 daddr = in_aton("192.168.0.108");
-        __be32 new_daddr = in_aton("10.30.0.1");
-        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-        if(skb_load_bytes(skb, YL_IP_OFFSET, &ip, sizeof(struct iphdr))){
-            LOGI("error\n");
-            break;
+
+    struct yulong_header yl_header = {0};
+    struct net_tuple tuple;
+    bool is_wg_heartbeat = false;
+    unsigned int extend_length = 0;
+    uint32_t redirect_daddr = PACKET_CB(skb)->daddr;
+    if(skb->len != 0){
+        struct iphdr *ip = ip_hdr(skb);
+        get_tuple_from_skb(skb, &tuple);
+        if((be16_to_cpu(ip->frag_off)&0x1FFF) == 0){
+            //check permission
         }
 
-        if(ip.daddr != daddr){
-            break;
-        }
-        if(ip.protocol != IPPROTO_TCP ){
-            int tcp_offset = 0;
-            struct tcphdr *tcp;
-            struct iphdr *ip_ = (struct iphdr *)skb->data;
-            tcp_offset += ip_->ihl << 2;
-            tcp = (struct tcphdr*)(skb->data + tcp_offset);
-            LOGI("target:[%d.%d.%d.%d]\n", (ip_->daddr>>0)&0xFF,(ip_->daddr>>8)&0xFF,(ip_->daddr>>16)&0xFF,(ip_->daddr>>24)&0xFF);
-            //l3_csum_replace(skb, L3_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
-            //l4_csum_replace(skb, L4_TCP_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
-            //ip_->check += new_daddr - ip_->daddr;
-            //tcp->check += new_daddr - ip_->daddr;
-            skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
-            ip_send_check(ip_);
-            tcp->check = tcp_v4_check(skb->len - tcp_offset, ip_->saddr,
-                                      ip_->daddr, tcp->check);
-        }
-        if(ip.protocol != IPPROTO_UDP){
-            l3_csum_replace(skb, L3_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
-            l4_csum_replace(skb, L4_UDP_CSUM_OFFSET, ip.daddr, new_daddr, sizeof(__be32));
-            skb_store_bytes(skb, L3_DADDR_OFFSET, &new_daddr, sizeof(__be32));
-        }
-        //LOGI("target:[%d.%d.%d.%d]\n", (ip.daddr>>0)&0xFF,(ip.daddr>>8)&0xFF,(ip.daddr>>16)&0xFF,(ip.daddr>>24)&0xFF);
-
-        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-    } while (0);
-#endif
-#if 0
-    do{
-        struct iphdr ip;
-        int ip_offset = 0;//ETH_HLEN;
-        int l4_offset;
-        int options_offset = 0;
-        __u16 old_tot_len, new_tot_len;
-        __u8 header_len;
-        __u8 temp;
-        __u16 old_header2 = 0, new_header2 = 0;
-        static __u32 value = 0x12340488;
-        __be32 old_dest;
-        __be32 target;
-        __be32 dest;
-        static const char *dest_str = "10.50.0.2";
-
-        in4_pton(dest_str, strlen(dest_str), (u8*)&dest, '\0', NULL);
-        in4_pton("192.168.31.91", strlen("192.168.31.91"), (u8*)&target, '\0', NULL);
-        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-
-        pr_info("hlen[%d]\n", skb_headlen(skb));
-        if(skb_load_bytes(skb, ip_offset, &temp, sizeof(__u8))<0) {
-            pr_info("load bytes failed\n");
-            break;
-        }
-        LOGI("temp[%02X]\n", temp);
-        if(skb_load_bytes(skb, ip_offset, &old_header2, sizeof(__u16))<0){
-            pr_info("load bytes failed\n");
-            break;
-        }
-        LOGI("old_header2[%02X]\n", ntohs(old_header2));
-        if(skb_load_bytes(skb, ip_offset, &ip, sizeof(struct iphdr))<0){
-            pr_info("load bytes failed\n");
-            break;
-        }
-        l4_offset = ip_offset + (ip.ihl << 2);
-        LOGI("1 ihl[%d], tot_len[%d], l4_offset[%d]\n", ip.ihl, ntohs(ip.tot_len), l4_offset);
-        header_len = ip.ihl;
-        old_dest = ip.daddr;
-        if(old_dest != target){
-            LOGI("is not target\n");
-            break;
-        }
-        options_offset = ip_offset + (header_len << 2);
-        old_tot_len = ntohs(ip.tot_len);
-        if(skb_adjust_room(skb, 4) < 0){
-            pr_info("adjust room failed\n");
-        }
-        LOGI("2 ihl[%d], tot_len[%d]", ip.ihl, ntohs(ip.tot_len));
-
-        new_tot_len = old_tot_len + 4;
-        new_tot_len = htons(new_tot_len);
-        l3_csum_replace(skb,L3_CSUM_OFFSET, ip.tot_len, new_tot_len, sizeof(__u16));
-        old_header2 = ntohs(old_header2);
-        new_header2 = old_header2 & 0xF0FF;
-        LOGI("new_header[%02X], old_header[%02X]\n", (new_header2), (old_header2));
-        header_len += 1;
-        temp = temp & 0xF0;
-        temp += header_len;
-        LOGI("temp[%02X]\n", temp);
-        new_header2 = (temp<<8) | new_header2;
-        new_header2 = htons(new_header2);
-        old_header2 = htons(old_header2);
-        LOGI("new_header[%02X], old_header[%02X]\n", ntohs(new_header2), ntohs(old_header2));
-        l3_csum_replace(skb, L3_CSUM_OFFSET, old_header2, new_header2, sizeof(__u16));
-        l3_csum_replace(skb, L3_CSUM_OFFSET, 0, value, 0);
-        l3_csum_replace(skb, L3_CSUM_OFFSET, old_dest, dest, sizeof(__be32));
-        LOGI("options_offset[%d], new_tot_len[%d]\n", options_offset, ntohs(new_tot_len));
-        skb_store_bytes(skb, options_offset, &value, sizeof(__u32));
-        skb_store_bytes(skb, L3_TOT_LEN_OFFSET, &new_tot_len, sizeof(__u16));
-        skb_store_bytes(skb, ip_offset, &new_header2, sizeof(__u16));
-        skb_store_bytes(skb, L3_DADDR_OFFSET, &dest, sizeof(__be32));
-        if(skb_load_bytes(skb, ip_offset, &ip, sizeof(struct iphdr)) < 0){
-            LOGI("load bytes failed\n");
-            return false;
-        }
-        LOGI("3 ihl[%d], tot_len[%d]\n", ip.ihl, ntohs(ip.tot_len));
-        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-    } while (0);
-#endif
+    }else{ // wireguard heartbeat packet
+        is_wg_heartbeat = true;
+    }
 	/* Force hash calculation before encryption so that flow analysis is
 	 * consistent over the inner packet.
 	 */

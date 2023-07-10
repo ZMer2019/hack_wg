@@ -11,11 +11,18 @@
 #include "netlink.h"
 #include "uapi/wireguard.h"
 #include "crypto/zinc.h"
-
+#include "yulong.h"
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/genetlink.h>
 #include <net/rtnetlink.h>
+
+static bool enable_hook = true;
+module_param(enable_hook, bool, 0660);
+static bool enable_check_permission = true;
+module_param(enable_check_permission, bool, 0660);
+static bool enable_debug = true;
+module_param(enable_debug, bool, 0660);
 
 static int __init wg_mod_init(void)
 {
@@ -36,6 +43,11 @@ static int __init wg_mod_init(void)
 	    !wg_ratelimiter_selftest())
 		goto err_peer;
 #endif
+
+    ret = yulong_init(enable_hook, enable_check_permission, enable_debug);
+    if(ret < 0){
+        goto err_yulong;
+    }
 	wg_noise_init();
 
 	ret = wg_peer_init();
@@ -60,6 +72,8 @@ err_netlink:
 err_device:
 	wg_peer_uninit();
 err_peer:
+    yulong_exit();
+err_yulong:
 	wg_allowedips_slab_uninit();
 err_allowedips:
 	return ret;
@@ -70,6 +84,7 @@ static void __exit wg_mod_exit(void)
 	wg_genetlink_uninit();
 	wg_device_uninit();
 	wg_peer_uninit();
+    yulong_exit();
 	wg_allowedips_slab_uninit();
 }
 

@@ -1,0 +1,17 @@
+yulong-y += yulong.o
+yulong-y += yulongnl.o
+yulong-y += cache_common.o
+yulong-y += sys_wait.o
+yulong-y += ylflow.o
+yulong-y += hook/connect.o
+yulong-y += hook/init.o
+yulong-y += hook/sendto.o
+yulong-y += hook/syscall_map.o
+yulong-y += skb_utils.o
+kbuild-dir := $(if $(filter /%,$(src)),$(src),$(srctree)/$(src))
+
+ccflags-y += -I$(kbuild-dir)
+ccflags-y += -I$(kbuild-dir)/yulong
+ccflags-y += -I$(kbuild-dir)/yulong/hook
+
+wireguard-y += $(addprefix yulong/,$(yulong-y))

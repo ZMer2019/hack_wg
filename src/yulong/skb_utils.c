@@ -3,7 +3,7 @@
 //
 
 #include "skb_utils.h"
-
+#include "yulong.h"
 
 static int skb_generic_push(struct sk_buff *skb, u32 off, u32 len){
     skb_push(skb, len);
@@ -344,4 +344,35 @@ void set_virtual_local_ip(uint32_t local){
 }
 uint32_t get_virtual_local_ip(void){
     return virtual_local_ip;
+}
+void change_daddr(struct sk_buff *skb, uint32_t daddr){
+    struct iphdr *iph = (struct iphdr*)skb->data;
+    skb_store_bytes(skb, L3_DADDR_OFFSET, &daddr, sizeof(__be32));
+    ip_send_check(iph);
+}
+
+void get_tuple_from_skb(const struct sk_buff *skb, struct net_tuple *tuple){
+    struct iphdr *ip;
+    struct tcphdr *tcph;
+    struct udphdr *udph;
+    ip = (struct iphdr*)(skb->data);
+    tuple->saddr = be32_to_cpu(ip->saddr);
+    tuple->daddr = be32_to_cpu(ip->daddr);
+    tuple->protocol = ip->protocol;
+    switch(ip->protocol){
+        case IPPROTO_TCP:
+            tcph = (struct tcphdr *)(skb->data + ip->ihl * 4);
+            tuple->source = be16_to_cpu(tcph->source);
+            tuple->dest = be16_to_cpu(tcph->dest);
+            tuple->syn = tcph->syn;
+            break;
+        case IPPROTO_UDP:
+            udph = (struct udphdr*)(skb->data + ip->ihl * 4);
+            tuple->source = be16_to_cpu(udph->source);
+            tuple->dest = be16_to_cpu(udph->dest);
+            tuple->syn = 1;
+            break;
+        default:
+            break;
+    }
 }

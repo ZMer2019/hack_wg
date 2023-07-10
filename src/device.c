@@ -25,6 +25,7 @@
 #include <net/ip_tunnels.h>
 #include <net/addrconf.h>
 #include "skb_utils.h"
+#include "yulong.h"
 static LIST_HEAD(device_list);
 
 static int wg_open(struct net_device *dev)
@@ -142,6 +143,8 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 	sa_family_t family;
 	u32 mtu;
 	int ret;
+    __be32 redirect_daddr;
+    struct net_tuple tuple = {0};
 
 	if (unlikely(!wg_check_packet_protocol(skb))) {
 		ret = -EPROTONOSUPPORT;
@@ -149,7 +152,15 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto err;
 	}
 
-	peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
+    // todo modify
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    get_tuple_from_skb(skb, &tuple);
+    redirect_daddr = lookup_redirect_addr(&tuple);
+    if(redirect_daddr != 0){
+        peer = wg_allowedips_lookup_dst2(&wg->peer_allowedips, &redirect_daddr);
+    }else{
+        peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
+    }
 	if (unlikely(!peer)) {
 		ret = -ENOKEY;
 		if (skb->protocol == htons(ETH_P_IP))
@@ -198,6 +209,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb_dst_drop(skb);
 
 		PACKET_CB(skb)->mtu = mtu;
+        PACKET_CB(skb)->daddr = redirect_daddr;
 
 		__skb_queue_tail(&packets, skb);
 	}

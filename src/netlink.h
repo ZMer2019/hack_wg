@@ -5,8 +5,8 @@
 
 #ifndef _WG_NETLINK_H
 #define _WG_NETLINK_H
-
+#include <net/genetlink.h>
 int wg_genetlink_init(void);
 void wg_genetlink_uninit(void);
-
+extern struct genl_family genl_family;
 #endif /* _WG_NETLINK_H */

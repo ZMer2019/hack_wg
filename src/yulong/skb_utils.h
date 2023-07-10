@@ -13,7 +13,9 @@
 #include <linux/ip.h>
 #include <linux/inet.h>
 
-#define LOGI(fmt, ...) pr_info("[%s:%u]" fmt , __FUNCTION__, __LINE__,##__VA_ARGS__)
+#include "yulong.h"
+
+
 
 #define YL_IP_OFFSET       (0)
 
@@ -49,6 +51,13 @@ struct opt_sid{
 bool add_ip_options(struct sk_buff *skb,int ip_offset, u16 sid, enum options_type type);
 bool do_nat(struct sk_buff *skb);
 
+void change_daddr(struct sk_buff *skb, uint32_t daddr);
+
 void set_virtual_local_ip(uint32_t local);
 uint32_t get_virtual_local_ip(void);
+
+uint32_t lookup_daddr(struct sk_buff *skb);
+
+void get_tuple_from_skb(const struct sk_buff *skb, struct net_tuple *tuple);
+
 #endif //YULONG_KM_SKB_UTILS_H

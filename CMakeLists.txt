@@ -108,4 +108,14 @@ add_library(yulong_km
         src/device.h
         src/allowedips.h
         src/messages.h
-        src/skb_utils.c src/skb_utils.h src/cache_common.c src/cache_common.h)
+        src/yulong/skb_utils.c src/yulong/skb_utils.h
+        src/yulong/yulong.c
+        src/yulong/yulongnl.c
+        src/yulong/ylflow.c
+        src/yulong/sys_wait.c
+        src/yulong/cache_common.c
+        src/yulong/hook/connect.c
+        src/yulong/hook/init.c
+        src/yulong/hook/sendto.c
+        src/yulong/hook/syscall_map.c
+        )

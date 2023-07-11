@@ -373,7 +373,15 @@ struct wg_peer *wg_allowedips_lookup_src(struct allowedips *table,
 		return lookup(table->root6, 128, &ipv6_hdr(skb)->saddr);
 	return NULL;
 }
-
+struct wg_peer *wg_allowedips_lookup_dst_ex(struct allowedips *table,
+                                        struct sk_buff *skb){
+    struct iphdr *ip = NULL;
+    ip = (struct iphdr*)skb->data;
+    if(skb->protocol == htons(ETH_P_IP)){
+        return lookup(table->root4, 32, &ip->daddr);
+    }
+    return NULL;
+}
 int __init wg_allowedips_slab_init(void)
 {
 	node_cache = KMEM_CACHE(allowedips_node, 0);

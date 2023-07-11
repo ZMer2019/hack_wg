@@ -48,6 +48,8 @@ struct wg_peer *wg_allowedips_lookup_dst(struct allowedips *table,
 					 struct sk_buff *skb);
 struct wg_peer *wg_allowedips_lookup_src(struct allowedips *table,
 					 struct sk_buff *skb);
+struct wg_peer *wg_allowedips_lookup_dst_ex(struct allowedips *table,
+                                         struct sk_buff *skb);
 struct wg_peer *wg_allowedips_lookup_dst2(struct allowedips *table,
                                           __be32 *daddr);
 #ifdef DEBUG

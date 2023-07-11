@@ -15,7 +15,10 @@
 #include "device.h"
 static struct yulong_context *_context = NULL;
 static uint32_t _wg_virtual_local_addr = 0;
-
+static char* INVALID_OTP_KEY = "00000000"
+                               "00000000"
+                               "00000000"
+                               "00000000";
 /**
  * because of hooking, yulong context cannot init with wg_device
  * */
@@ -216,4 +219,112 @@ void set_yulongd_pid(pid_t pid){
 }
 pid_t get_yulongd_pid(void){
     return _context->yulongd_pid;
+}
+
+struct identity_entry* find_id_entry_by_tuple(const struct net_tuple *tuple,
+                                              enum inner_packet_type *pkt_type){
+    struct identity_hashtable *egress_table, *ingress_table;
+    struct identity_entry *egress_entry, *ingress_entry, *entry = NULL;
+    egress_table = context()->egress_id_hashtable;
+    ingress_table = context()->ingress_id_hashtable;
+
+    egress_entry = egress_table->lookup(egress_table, tuple->saddr, tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
+    ingress_entry = ingress_table->lookup(ingress_table, tuple->saddr, tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
+    if(egress_entry){
+        entry = egress_entry;
+        *pkt_type = PACKET_TYPE_OUTBOUND;
+    }
+    if(ingress_entry){
+        entry = ingress_entry;
+        *pkt_type = PACKET_TYPE_INBOUND;
+    }
+    return entry;
+}
+static struct identity_entry *create_entry(const struct net_tuple *tuple){
+    struct identity_entry *entry = kzalloc(sizeof(struct identity_entry), GFP_KERNEL);
+    if(!entry){
+        LOGE("allocate memory failed\n");
+        return NULL;
+    }
+
+    entry->key.saddr = tuple->saddr;
+    entry->key.daddr = tuple->daddr;
+    entry->key.source = tuple->source;
+    entry->key.dest = tuple->dest;
+    entry->key.protocol = tuple->protocol;
+    memcpy(entry->leaf.otp_key, INVALID_OTP_KEY, OTP_KEY_LENGTH);
+    entry->timestamp = ktime_to_timespec(ktime_get()).tv_sec;
+    return entry;
+}
+static struct identity_entry* save(struct identity_hashtable *table,
+        const struct net_tuple *tuple,
+        uint32_t sid, uint32_t code){
+    struct identity_entry *entry = NULL;
+    if(unlikely(!tuple)){
+        return NULL;
+    }
+    entry = create_entry(tuple);
+    if(!entry){
+        return NULL;
+    }
+    entry->leaf.sid = sid;
+    entry->leaf.code = code;
+    table->add(table, entry);
+    return entry;
+}
+static void revert(const struct net_tuple *src, struct net_tuple *dest){
+    dest->saddr = src->daddr;
+    dest->daddr = src->saddr;
+    dest->source = src->dest;
+    dest->dest = src->source;
+    dest->protocol = src->protocol;
+    dest->syn = src->syn;
+}
+struct identity_entry* cache_identity(const struct net_tuple *tuple,
+                    const struct yulong_header* header,
+                    bool is_published){
+    struct identity_hashtable *egress_table = context()->egress_id_hashtable;
+    struct identity_hashtable *ingress_table = context()->ingress_id_hashtable;
+    struct identity_entry *entry = NULL;
+
+    if(header->packet_type == PACKET_TYPE_OUTBOUND){
+        entry = egress_table->lookup(egress_table, tuple->saddr,
+                                     tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
+    }
+    if(header->packet_type == PACKET_TYPE_INBOUND){
+        entry = ingress_table->lookup(ingress_table, tuple->saddr,
+                                     tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
+    }
+    if(entry){
+        entry->timestamp = ktime_to_timespec(ktime_get()).tv_sec;
+        entry->leaf.sid = header->leaf_sid;
+        entry->leaf.code = header->leaf_code;
+    }else{
+        if(header->packet_type == PACKET_TYPE_OUTBOUND){
+            if(is_published){
+                struct net_tuple revert_tuple = {0};
+                revert(tuple, &revert_tuple);
+                entry = ingress_table->lookup(ingress_table,
+                                             revert_tuple.saddr, revert_tuple.daddr,
+                                             revert_tuple.source, revert_tuple.dest,
+                                             revert_tuple.protocol);
+                if(!entry){
+                    entry = save(ingress_table, &revert_tuple, header->leaf_sid, header->leaf_code);
+                    if(!entry){
+                        LOGE("save error:\n");
+                        return NULL;
+                    }
+                }else{
+                    entry->timestamp = ktime_to_timespec(ktime_get()).tv_sec;
+                    entry->leaf.sid = header->leaf_sid;
+                    entry->leaf.code = header->leaf_code;
+                }
+            }
+            entry = save(egress_table, tuple, header->leaf_sid, header->leaf_code);
+        }
+        if(header->packet_type == PACKET_TYPE_OUTBOUND){
+            entry = save(ingress_table, tuple, header->leaf_sid, header->leaf_code);
+        }
+    }
+    return entry;
 }

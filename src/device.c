@@ -151,9 +151,9 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		net_dbg_ratelimited("%s: Invalid IP packet\n", dev->name);
 		goto err;
 	}
-
+#if 1
     // todo modify
-    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     get_tuple_from_skb(skb, &tuple);
     redirect_daddr = lookup_redirect_addr(&tuple);
     if(redirect_daddr != 0){
@@ -161,6 +161,8 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
     }else{
         peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
     }
+#endif
+    //peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
 	if (unlikely(!peer)) {
 		ret = -ENOKEY;
 		if (skb->protocol == htons(ETH_P_IP))

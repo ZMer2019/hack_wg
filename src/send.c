@@ -175,17 +175,31 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	struct sk_buff *trailer;
 	int num_frags;
 
-    struct yulong_header yl_header = {0};
+    struct yulong_header *p_header = NULL;
     struct net_tuple tuple;
     bool is_wg_heartbeat = false;
+    bool is_target_protocol = true;
     unsigned int extend_length = 0;
     uint32_t redirect_daddr = PACKET_CB(skb)->daddr;
+    enum inner_packet_type pkt_type;
+    struct identity_entry *id_entry = NULL;
     if(skb->len != 0){
         struct iphdr *ip = ip_hdr(skb);
-        get_tuple_from_skb(skb, &tuple);
-        if((be16_to_cpu(ip->frag_off)&0x1FFF) == 0){
-            //check permission
-        }
+        do{
+            get_tuple_from_skb(skb, &tuple);
+            if(tuple.protocol != IPPROTO_TCP && tuple.protocol != IPPROTO_UDP){
+                //is_target_protocol = false;
+                break;
+            }
+            id_entry = find_id_entry_by_tuple(&tuple, &pkt_type);
+            if(!id_entry){
+                LOGE("find id entry failed\n");
+                return false;
+            }
+            if((be16_to_cpu(ip->frag_off)&0x1FFF) == 0){
+                //check permission
+            }
+        } while (0);
 
     }else{ // wireguard heartbeat packet
         is_wg_heartbeat = true;
@@ -197,8 +211,16 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 
 	/* Calculate lengths. */
 	padding_len = calculate_skb_padding(skb);
-	trailer_len = padding_len + noise_encrypted_len(0);
-	plaintext_len = skb->len + padding_len;
+    if(is_wg_heartbeat || !is_target_protocol){
+        trailer_len = padding_len + noise_encrypted_len(0);
+        plaintext_len = skb->len + padding_len;
+    }else{
+        extend_length = sizeof(struct yulong_header) + padding_len;
+        trailer_len = noise_encrypted_len(0) + extend_length;
+        plaintext_len = skb->len + extend_length;
+        //LOGI("extend_length[%d], trailer_len[%d], plaintext_len[%d]\n",extend_length, trailer_len, plaintext_len);
+    }
+
 
 	/* Expand data section to have room for padding and auth tag. */
 	num_frags = skb_cow_data(skb, trailer_len, &trailer);
@@ -229,7 +251,20 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	header->header.type = cpu_to_le32(MESSAGE_DATA);
 	header->key_idx = keypair->remote_index;
 	header->counter = cpu_to_le64(PACKET_CB(skb)->nonce);
-	pskb_put(skb, trailer, trailer_len);
+    if(is_wg_heartbeat || !is_target_protocol){
+        pskb_put(skb, trailer, trailer_len);
+    }else{
+        p_header = (struct yulong_header*)pskb_put(skb, trailer, trailer_len);
+        p_header->magic_id = MAGIC_ID;
+        p_header->padding_len = padding_len;
+        p_header->length = extend_length;
+        p_header->auth_type = AUTH_TYPE_DOUBLE_SIDE;
+        if(id_entry){
+            p_header->leaf_sid = id_entry->leaf.sid;
+        }
+        p_header->leaf_code = 0;
+        p_header->packet_type = pkt_type;
+    }
 
 	/* Now we can encrypt the scattergather segments */
 	sg_init_table(sg, num_frags);
@@ -239,6 +274,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	if (skb_to_sgvec(skb, sg, sizeof(struct message_data),
 			 noise_encrypted_len(plaintext_len)) <= 0)
 		return false;
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
 	return chacha20poly1305_encrypt_sg_inplace(sg, plaintext_len, NULL, 0,
 						   PACKET_CB(skb)->nonce,
 						   keypair->sending.key,

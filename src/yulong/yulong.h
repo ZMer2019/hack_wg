@@ -25,7 +25,7 @@
 #define STEP                (60)
 #define INVALID_SID         (UINT_MAX)
 #define OTP_CODE_LENGTH     (6)
-
+#define OTP_KEY_LENGTH      (32)
 enum node_type{
     NODE_TYPE_YULONG = 0,
     NODE_TYPE_DACS = 1,
@@ -116,5 +116,12 @@ void set_yulongd_pid(pid_t pid);
 pid_t get_yulongd_pid(void);
 
 __be32 lookup_redirect_addr(const struct net_tuple *tuple);
+
+struct identity_entry* find_id_entry_by_tuple(const struct net_tuple *tuple,
+        enum inner_packet_type *pkt_type);
+
+struct identity_entry* cache_identity(const struct net_tuple *tuple,
+        const struct yulong_header* header,
+                bool is_published);
 
 #endif //YULONG_KM_YULONG_H

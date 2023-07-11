@@ -257,6 +257,13 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	unsigned int offset;
 	int num_frags;
 
+    struct yulong_header *yl_header = NULL;
+    struct iphdr *ip = NULL;
+    int frag_off;
+    struct net_tuple tuple = {0};
+    bool is_published = false;
+    struct identity_entry *entry = NULL;
+
 	if (unlikely(!keypair))
 		return false;
 
@@ -292,13 +299,48 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 						 simd_context))
 		return false;
 
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    get_tuple_from_skb(skb, &tuple);
+    ip = (struct iphdr*)skb->data;
+    yl_header = (struct yulong_header*)(skb->data + be16_to_cpu(ip->tot_len));
+    if(yl_header->magic_id == MAGIC_ID){
+        frag_off = be16_to_cpu(ip->frag_off)&0x1FFF;
+        if(frag_off == 0){
+            if(keypair->entry.peer){
+                struct wg_peer *peer = NULL;
+                peer = wg_allowedips_lookup_dst_ex(&keypair->entry.peer->device->peer_allowedips, skb);
+                if(!peer){
+                    is_published = true;
+                }
+                wg_peer_put(peer);
+            }else{
+                return false;
+            }
+            if(tuple.protocol == IPPROTO_UDP || tuple.protocol == IPPROTO_TCP){
+                entry = cache_identity(&tuple, yl_header, is_published);
+                if(!entry){
+                    return false;
+                }
+            }
+        }
+        skb_push(skb, offset);
+        if (pskb_trim(skb, skb->len - noise_encrypted_len(0) - yl_header->length))
+            return false;
+        skb_pull(skb, offset);
+    }else{
+        int special_len = 0;
+        yl_header = (struct yulong_header*)(skb->data);
+        if(yl_header->magic_id == MAGIC_ID){
+            special_len = yl_header->length;
+        }
+        skb_push(skb, offset);
+        if (pskb_trim(skb, skb->len - noise_encrypted_len(0) - special_len))
+            return false;
+        skb_pull(skb, offset);
+    }
 	/* Another ugly situation of pushing and pulling the header so as to
 	 * keep endpoint information intact.
 	 */
-	skb_push(skb, offset);
-	if (pskb_trim(skb, skb->len - noise_encrypted_len(0)))
-		return false;
-	skb_pull(skb, offset);
 	return true;
 }
 

@@ -345,9 +345,15 @@ void set_virtual_local_ip(uint32_t local){
 uint32_t get_virtual_local_ip(void){
     return virtual_local_ip;
 }
-void change_daddr(struct sk_buff *skb, uint32_t daddr){
+void change_addr(struct sk_buff *skb, uint32_t addr, enum inner_packet_type pkt_type){
     struct iphdr *iph = (struct iphdr*)skb->data;
-    skb_store_bytes(skb, L3_DADDR_OFFSET, &daddr, sizeof(__be32));
+    addr = htonl(addr);
+    if(pkt_type == PACKET_TYPE_OUTBOUND){
+        skb_store_bytes(skb, L3_DADDR_OFFSET, &addr, sizeof(__be32));
+    }
+    if(pkt_type == PACKET_TYPE_INBOUND){
+        skb_store_bytes(skb, L3_SADDR_OFFSET, &addr, sizeof(__be32));
+    }
     ip_send_check(iph);
 }
 

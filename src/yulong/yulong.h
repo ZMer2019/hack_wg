@@ -115,7 +115,7 @@ bool is_bypass_nic(const char *name);
 void set_yulongd_pid(pid_t pid);
 pid_t get_yulongd_pid(void);
 
-__be32 lookup_redirect_addr(const struct net_tuple *tuple);
+__be32 lookup_redirect_addr(const struct net_tuple *tuple, enum inner_packet_type *pkt_type);
 
 struct identity_entry* find_id_entry_by_tuple(const struct net_tuple *tuple,
         enum inner_packet_type *pkt_type);

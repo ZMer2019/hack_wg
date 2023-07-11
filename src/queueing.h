@@ -62,7 +62,7 @@ struct packet_cb {
 	atomic_t state;
 	u32 mtu;
 	u8 ds;
-    uint32_t daddr;
+    void *pri_data;
 };
 
 #define PACKET_CB(skb) ((struct packet_cb *)((skb)->cb))

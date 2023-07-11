@@ -145,7 +145,9 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 	int ret;
     __be32 redirect_daddr;
     struct net_tuple tuple = {0};
-
+    struct yulong_header *header = NULL;
+    enum inner_packet_type pkt_type;
+    struct identity_entry *entry = NULL;
 	if (unlikely(!wg_check_packet_protocol(skb))) {
 		ret = -EPROTONOSUPPORT;
 		net_dbg_ratelimited("%s: Invalid IP packet\n", dev->name);
@@ -153,16 +155,35 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 #if 1
     // todo modify
-    //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-    get_tuple_from_skb(skb, &tuple);
-    redirect_daddr = lookup_redirect_addr(&tuple);
-    if(redirect_daddr != 0){
-        peer = wg_allowedips_lookup_dst2(&wg->peer_allowedips, &redirect_daddr);
-    }else{
-        peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
+    header = kzalloc(sizeof(struct yulong_header), GFP_KERNEL);
+    if(!header){
+        goto err;
     }
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    get_tuple_from_skb(skb, &tuple);
+    entry = find_id_entry_by_tuple(&tuple, &pkt_type);
+    if(!entry){
+        LOGE("find id entry failed\n");
+        goto err;
+        //return false;
+    }
+    header->packet_type = pkt_type;
+    header->leaf_sid = entry->leaf.sid;
+    header->leaf_code = entry->leaf.code;
+    if(header->leaf_code == 0){
+        //todo calculate otp code
+    }
+    redirect_daddr = lookup_redirect_addr(&tuple, &pkt_type);
+    LOGI("[%d.%d.%d.%d], pkt_type[%d]\n",(redirect_daddr>>24)&0xFF,
+         (redirect_daddr>>16)&0xFF,
+         (redirect_daddr>>8)&0xFF,
+         (redirect_daddr>>0)&0xFF, pkt_type);
+    if(redirect_daddr != 0){
+        change_addr(skb, redirect_daddr, pkt_type);
+    }
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
 #endif
-    //peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
+    peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
 	if (unlikely(!peer)) {
 		ret = -ENOKEY;
 		if (skb->protocol == htons(ETH_P_IP))
@@ -211,8 +232,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb_dst_drop(skb);
 
 		PACKET_CB(skb)->mtu = mtu;
-        PACKET_CB(skb)->daddr = redirect_daddr;
-
+        PACKET_CB(skb)->pri_data = header;
 		__skb_queue_tail(&packets, skb);
 	}
 

@@ -175,15 +175,13 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	struct sk_buff *trailer;
 	int num_frags;
 
-    struct yulong_header *p_header = NULL;
-    struct net_tuple tuple;
+    struct yulong_header *p_header = PACKET_CB(skb)->pri_data;
     bool is_wg_heartbeat = false;
     bool is_target_protocol = true;
     unsigned int extend_length = 0;
-    uint32_t redirect_daddr = PACKET_CB(skb)->daddr;
-    enum inner_packet_type pkt_type;
-    struct identity_entry *id_entry = NULL;
+
     if(skb->len != 0){
+#if 0
         struct iphdr *ip = ip_hdr(skb);
         do{
             get_tuple_from_skb(skb, &tuple);
@@ -194,13 +192,13 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
             id_entry = find_id_entry_by_tuple(&tuple, &pkt_type);
             if(!id_entry){
                 LOGE("find id entry failed\n");
-                return false;
+                //return false;
             }
             if((be16_to_cpu(ip->frag_off)&0x1FFF) == 0){
                 //check permission
             }
         } while (0);
-
+#endif
     }else{ // wireguard heartbeat packet
         is_wg_heartbeat = true;
     }
@@ -259,11 +257,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
         p_header->padding_len = padding_len;
         p_header->length = extend_length;
         p_header->auth_type = AUTH_TYPE_DOUBLE_SIDE;
-        if(id_entry){
-            p_header->leaf_sid = id_entry->leaf.sid;
-        }
         p_header->leaf_code = 0;
-        p_header->packet_type = pkt_type;
     }
 
 	/* Now we can encrypt the scattergather segments */

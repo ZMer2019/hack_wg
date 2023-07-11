@@ -13,6 +13,7 @@
 #include "yulong/cache_common.h"
 #include "sys_wait.h"
 #include "yulong.h"
+#include "skb_utils.h"
 #include <linux/if.h>
 
 #include <net/sock.h>
@@ -659,7 +660,7 @@ static int netlink_yulong_init(struct sk_buff *skb, struct genl_info *info){
 }
 
 static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
-    uint32_t daddr, new_daddr;
+    uint32_t daddr, redirect_daddr;
     uint16_t source, dest;
     uint8_t protocol;
     uint32_t sid;
@@ -701,7 +702,7 @@ static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
     start_time = nla_get_u64(info->attrs[WGACL_A_STARTTIME]);
     request_seq = nla_get_s32(info->attrs[WGACL_A_SEQ]);
     protocol = nla_get_u8(info->attrs[WGACL_A_PROTOCOL]);
-    new_daddr = nla_get_u8(info->attrs[WGACL_A_NEW_DADDR]);
+    redirect_daddr = nla_get_u32(info->attrs[WGACL_A_NEW_DADDR]);
     do{
         login_entry = kzalloc(sizeof(struct login_hashtable_entry), GFP_KERNEL);
         if(login_entry){
@@ -718,7 +719,7 @@ static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
         }
         entry = kzalloc(sizeof(struct identity_entry), GFP_KERNEL);
         if(entry){
-            entry->key.saddr = wg_virtual_local_addr();
+            entry->key.saddr = get_virtual_local_ip();
             entry->key.daddr = daddr;
             entry->key.source = source;
             entry->key.dest = dest;
@@ -728,6 +729,11 @@ static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
             entry->type = PROTOCOL_TYPE_YULONG;
             memcpy(entry->leaf.otp_key, otp_key, OTP_KEY_LEN);
             context()->egress_id_hashtable->add(context()->egress_id_hashtable, entry);
+            LOGI("%d.%d.%d.%d:%d->%d.%d.%d.%d:%d\n",
+                 (entry->key.saddr>>24)&0xFF,(entry->key.saddr>>16)&0xFF,
+                 (entry->key.saddr>>8)&0xFF,(entry->key.saddr>>0)&0xFF,entry->key.source,
+                 (entry->key.daddr>>24)&0xFF,(entry->key.daddr>>16)&0xFF,
+                 (entry->key.daddr>>8)&0xFF,(entry->key.daddr>>0)&0xFF,entry->key.dest)
         }else{
             err = 2;
             break;
@@ -735,9 +741,12 @@ static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
 
         addr = kzalloc(sizeof(struct nat_addr), GFP_KERNEL);
         if(addr){
-            addr->original_daddr = htonl(dest);
-            addr->new_daddr = new_daddr;
-
+            addr->original_daddr = daddr;
+            addr->redirect_daddr = redirect_daddr;
+            LOGI("sid[%d],redirect_daddr[%d.%d.%d.%d]\n", sid,(addr->redirect_daddr>>24)&0xFF,
+                 (addr->redirect_daddr>>16)&0xFF,
+                 (addr->redirect_daddr>>8)&0xFF,
+                 (addr->redirect_daddr>>0)&0xFF)
             context()->nat_table->insert(context()->nat_table, sid, addr);
         }else{
             err = 3;

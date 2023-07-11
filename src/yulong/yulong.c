@@ -186,21 +186,29 @@ bool is_bypass_nic(const char *name){
     return ret;
 }
 
-__be32 lookup_redirect_addr(const struct net_tuple *tuple){
+__be32 lookup_redirect_addr(const struct net_tuple *tuple, enum inner_packet_type *pkt_type){
     struct identity_entry *entry;
     struct identity_hashtable *table;
     struct nat_addr *addr = NULL;
     uint32_t ret = 0;
+    *pkt_type = PACKET_TYPE_OUTBOUND;
     table = context()->egress_id_hashtable;
     entry = table->lookup(table, tuple->saddr, tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
     if(!entry){
+        *pkt_type = PACKET_TYPE_INBOUND;
         table = context()->ingress_id_hashtable;
         entry = table->lookup(table, tuple->saddr, tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
     }
     if(entry){
-        addr = (struct nat_addr*)context()->nat_table->lookup(context()->nat_table, entry->leaf.sid);
-        if(addr){
-            ret = addr->new_daddr;
+        struct rbtree_cache_node *node = NULL;
+        LOGI("sid[%d]\n", entry->leaf.sid);
+        node = context()->nat_table->lookup(context()->nat_table, entry->leaf.sid);
+        if(node){
+            if(!node->data){
+                return 0;
+            }
+            addr = (struct nat_addr*)node->data;
+            ret = addr->redirect_daddr;
         }
     }
     if(ret != 0){
@@ -286,7 +294,7 @@ struct identity_entry* cache_identity(const struct net_tuple *tuple,
     struct identity_hashtable *egress_table = context()->egress_id_hashtable;
     struct identity_hashtable *ingress_table = context()->ingress_id_hashtable;
     struct identity_entry *entry = NULL;
-
+    LOGI("pkt_type[%d]\n", header->packet_type);
     if(header->packet_type == PACKET_TYPE_OUTBOUND){
         entry = egress_table->lookup(egress_table, tuple->saddr,
                                      tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
@@ -321,9 +329,17 @@ struct identity_entry* cache_identity(const struct net_tuple *tuple,
                 }
             }
             entry = save(egress_table, tuple, header->leaf_sid, header->leaf_code);
+            if(!entry){
+                LOGE("save error:\n");
+                return NULL;
+            }
         }
-        if(header->packet_type == PACKET_TYPE_OUTBOUND){
+        if(header->packet_type == PACKET_TYPE_INBOUND){
             entry = save(ingress_table, tuple, header->leaf_sid, header->leaf_code);
+            if(!entry){
+                LOGE("save error:\n");
+                return NULL;
+            }
         }
     }
     return entry;

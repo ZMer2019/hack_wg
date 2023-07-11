@@ -44,8 +44,8 @@ struct otp_key{
     unsigned char otp_key[OTP_KEY_LEN];
 };
 struct nat_addr{
-    __be32 original_daddr;
-    __be32 new_daddr;
+    uint32_t original_daddr;
+    uint32_t redirect_daddr;
 };
 enum protocol_type{
     PROTOCOL_TYPE_ORIGINAL = 0,

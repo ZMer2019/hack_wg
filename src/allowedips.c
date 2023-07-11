@@ -361,7 +361,8 @@ struct wg_peer *wg_allowedips_lookup_dst(struct allowedips *table,
 }
 struct wg_peer *wg_allowedips_lookup_dst2(struct allowedips *table,
         __be32 *daddr){
-    return lookup(table->root4, 32, daddr);
+    __be32 tmp = cpu_to_be32(*daddr);
+    return lookup(table->root4, 32, &tmp);
 }
 /* Returns a strong reference to a peer */
 struct wg_peer *wg_allowedips_lookup_src(struct allowedips *table,

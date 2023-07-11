@@ -319,6 +319,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
             if(tuple.protocol == IPPROTO_UDP || tuple.protocol == IPPROTO_TCP){
                 entry = cache_identity(&tuple, yl_header, is_published);
                 if(!entry){
+                    LOGI("cache identity failed\n");
                     return false;
                 }
             }
@@ -338,6 +339,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
             return false;
         skb_pull(skb, offset);
     }
+    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
 	/* Another ugly situation of pushing and pulling the header so as to
 	 * keep endpoint information intact.
 	 */

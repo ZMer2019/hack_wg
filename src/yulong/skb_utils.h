@@ -14,7 +14,7 @@
 #include <linux/inet.h>
 
 #include "yulong.h"
-
+#include "messages.h"
 
 
 #define YL_IP_OFFSET       (0)
@@ -51,7 +51,7 @@ struct opt_sid{
 bool add_ip_options(struct sk_buff *skb,int ip_offset, u16 sid, enum options_type type);
 bool do_nat(struct sk_buff *skb);
 
-void change_daddr(struct sk_buff *skb, uint32_t daddr);
+void change_addr(struct sk_buff *skb, uint32_t addr, enum inner_packet_type pkt_type);
 
 void set_virtual_local_ip(uint32_t local);
 uint32_t get_virtual_local_ip(void);

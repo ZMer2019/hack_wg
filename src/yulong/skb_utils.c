@@ -347,9 +347,15 @@ uint32_t get_virtual_local_ip(void){
 }
 void change_addr(struct sk_buff *skb, uint32_t addr, enum inner_packet_type pkt_type){
     struct iphdr *iph = (struct iphdr*)skb->data;
+    struct tcphdr *tcph = (struct tcphdr*)(skb->data + (iph->ihl << 2));
+    __sum16 sum = tcph->check;
     addr = htonl(addr);
+
     if(pkt_type == PACKET_TYPE_OUTBOUND){
+        uint32_t ori = iph->daddr;
+        csum_replace4(&sum, ori, addr);
         skb_store_bytes(skb, L3_DADDR_OFFSET, &addr, sizeof(__be32));
+        skb_store_bytes(skb, L4_TCP_CSUM_OFFSET, &sum, sizeof(__sum16));
     }
     if(pkt_type == PACKET_TYPE_INBOUND){
         skb_store_bytes(skb, L3_SADDR_OFFSET, &addr, sizeof(__be32));

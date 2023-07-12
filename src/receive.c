@@ -263,6 +263,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
     struct net_tuple tuple = {0};
     bool is_end_of_tunnel = false;
     struct identity_entry *entry = NULL;
+    ktime_t start, end;
 
 	if (unlikely(!keypair))
 		return false;
@@ -299,7 +300,8 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 						 simd_context))
 		return false;
 
-    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    start = ktime_to_timespec(ktime_get()).tv_sec;
     get_tuple_from_skb(skb, &tuple);
     ip = (struct iphdr*)skb->data;
     yl_header = (struct yulong_header*)(skb->data + be16_to_cpu(ip->tot_len));
@@ -350,8 +352,9 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
             return false;
         skb_pull(skb, offset);
     }
-
-    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+    end = ktime_to_timespec(ktime_get()).tv_sec;
+    LOGI("start[%lld], end[%lld], interval[%lld]\n", start, end, end - start);
+    //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
 	/* Another ugly situation of pushing and pulling the header so as to
 	 * keep endpoint information intact.
 	 */

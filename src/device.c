@@ -148,12 +148,14 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
     struct yulong_header *header = NULL;
     enum inner_packet_type pkt_type;
     struct identity_entry *entry = NULL;
+    ktime_t start, end;
 	if (unlikely(!wg_check_packet_protocol(skb))) {
 		ret = -EPROTONOSUPPORT;
 		net_dbg_ratelimited("%s: Invalid IP packet\n", dev->name);
 		goto err;
 	}
     // todo modify
+    start = ktime_to_timespec(ktime_get()).tv_sec;
     print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     get_tuple_from_skb(skb, &tuple);
     if(tuple.protocol == IPPROTO_TCP || tuple.protocol == IPPROTO_UDP){
@@ -177,17 +179,21 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
         }
         if(entry->login_node){
             redirect_daddr = lookup_redirect_addr(entry->leaf.sid, PACKET_POINT_LOGIN);
+#if 0
             LOGI("[%d.%d.%d.%d], pkt_type[%d]\n",(redirect_daddr>>24)&0xFF,
                  (redirect_daddr>>16)&0xFF,
                  (redirect_daddr>>8)&0xFF,
                  (redirect_daddr>>0)&0xFF, pkt_type);
+#endif
             if(redirect_daddr != 0){
                 change_addr(skb, redirect_daddr, pkt_type);
             }
         }
         print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     }
+    end = ktime_to_timespec(ktime_get()).tv_sec;
 
+    LOGI("start[%lld], end[%lld], interval[%lld]\n", start, end, end - start);
     peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
 	if (unlikely(!peer)) {
 		ret = -ENOKEY;

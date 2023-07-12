@@ -23,7 +23,7 @@ if(context()->enable_debug){\
     pr_err("[%s:%u]" fmt , __FUNCTION__, __LINE__,##__VA_ARGS__); \
     }\
 }
-
+#define LOG(fmt, ...)
 
 #define HOOK_LOGI(fmt, ...) pr_info("[%s:%u]" fmt , __FUNCTION__, __LINE__,##__VA_ARGS__)
 #define HOOK_LOGE(fmt, ...) pr_err("[%s:%u]" fmt , __FUNCTION__, __LINE__,##__VA_ARGS__)

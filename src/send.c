@@ -175,11 +175,14 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	struct sk_buff *trailer;
 	int num_frags;
 
-    struct yulong_header *p_header = PACKET_CB(skb)->pri_data;
+    struct yulong_header *p_header = NULL;
+    struct yulong_header *p_identity = PACKET_CB(skb)->pri_data;
     bool is_wg_heartbeat = false;
     bool is_target_protocol = true;
     unsigned int extend_length = 0;
-
+    if(!p_identity){
+        is_target_protocol = false;
+    }
     if(skb->len != 0){
 #if 0
         struct iphdr *ip = ip_hdr(skb);
@@ -258,8 +261,12 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
         p_header->length = extend_length;
         p_header->auth_type = AUTH_TYPE_DOUBLE_SIDE;
         p_header->leaf_code = 0;
+        p_header->packet_type = p_identity->packet_type;
+        p_header->leaf_sid = p_identity->leaf_sid;
     }
-
+    if(p_identity){
+        kfree(p_identity);
+    }
 	/* Now we can encrypt the scattergather segments */
 	sg_init_table(sg, num_frags);
 

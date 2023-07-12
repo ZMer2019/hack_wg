@@ -261,7 +261,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
     struct iphdr *ip = NULL;
     int frag_off;
     struct net_tuple tuple = {0};
-    bool is_published = false;
+    bool is_end_of_tunnel = false;
     struct identity_entry *entry = NULL;
 
 	if (unlikely(!keypair))
@@ -304,30 +304,41 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
     ip = (struct iphdr*)skb->data;
     yl_header = (struct yulong_header*)(skb->data + be16_to_cpu(ip->tot_len));
     if(yl_header->magic_id == MAGIC_ID){
+        if(likely(keypair->entry.peer)){
+            struct wg_peer *peer = NULL;
+            peer = wg_allowedips_lookup_dst_ex(&keypair->entry.peer->device->peer_allowedips, skb);
+            if(!peer){
+                is_end_of_tunnel = true;
+            }
+            wg_peer_put(peer);
+        }else{
+            LOGE("fatal error: unreachable routine\n");
+            return false;
+        }
         frag_off = be16_to_cpu(ip->frag_off)&0x1FFF;
         if(frag_off == 0){
-            if(keypair->entry.peer){
-                struct wg_peer *peer = NULL;
-                peer = wg_allowedips_lookup_dst_ex(&keypair->entry.peer->device->peer_allowedips, skb);
-                if(!peer){
-                    is_published = true;
-                }
-                wg_peer_put(peer);
-            }else{
-                return false;
-            }
-            if(tuple.protocol == IPPROTO_UDP || tuple.protocol == IPPROTO_TCP){
-                entry = cache_identity(&tuple, yl_header, is_published);
-                if(!entry){
-                    LOGI("cache identity failed\n");
-                    return false;
-                }
-            }
+            // just check first slice for ip packet
+            // todo check permission here
         }
         skb_push(skb, offset);
         if (pskb_trim(skb, skb->len - noise_encrypted_len(0) - yl_header->length))
             return false;
         skb_pull(skb, offset);
+
+        if(is_end_of_tunnel){
+            int addr = lookup_redirect_addr(yl_header->leaf_sid, PACKET_POINT_END_OF_TUNNEL);
+            change_addr(skb, addr, yl_header->packet_type);
+            LOGI("arrived to the end of tunnel\n");
+        }
+
+        if(tuple.protocol == IPPROTO_UDP || tuple.protocol == IPPROTO_TCP){
+            get_tuple_from_skb(skb, &tuple);
+            entry = cache_identity(&tuple, yl_header, is_end_of_tunnel);
+            if(!entry){
+                LOGI("cache identity failed\n");
+                return false;
+            }
+        }
     }else{
         int special_len = 0;
         yl_header = (struct yulong_header*)(skb->data);
@@ -339,6 +350,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
             return false;
         skb_pull(skb, offset);
     }
+
     print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
 	/* Another ugly situation of pushing and pulling the header so as to
 	 * keep endpoint information intact.

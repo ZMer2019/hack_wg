@@ -12,7 +12,7 @@
 #include "log.h"
 #include "sys_wait.h"
 #include "cache_common.h"
-#include "device.h"
+#include "yulongnl.h"
 static struct yulong_context *_context = NULL;
 static uint32_t _wg_virtual_local_addr = 0;
 static char* INVALID_OTP_KEY = "00000000"
@@ -186,39 +186,28 @@ bool is_bypass_nic(const char *name){
     return ret;
 }
 
-__be32 lookup_redirect_addr(const struct net_tuple *tuple, enum inner_packet_type *pkt_type){
-    struct identity_entry *entry;
-    struct identity_hashtable *table;
+__be32 lookup_redirect_addr(uint32_t sid, enum packet_point point){
     struct nat_addr *addr = NULL;
     uint32_t ret = 0;
-    *pkt_type = PACKET_TYPE_OUTBOUND;
-    table = context()->egress_id_hashtable;
-    entry = table->lookup(table, tuple->saddr, tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
-    if(!entry){
-        *pkt_type = PACKET_TYPE_INBOUND;
-        table = context()->ingress_id_hashtable;
-        entry = table->lookup(table, tuple->saddr, tuple->daddr, tuple->source, tuple->dest, tuple->protocol);
+    struct rbtree_cache_node *node = NULL;
+    LOGI("sid[%d]\n", sid);
+    node = context()->nat_table->lookup(context()->nat_table, sid);
+    if(!node){
+        netlink_redirect_addr_request(sid, get_yulongd_pid());
+        node = context()->nat_table->lookup(context()->nat_table, sid);
     }
-    if(entry){
-        struct rbtree_cache_node *node = NULL;
-        LOGI("sid[%d]\n", entry->leaf.sid);
-        node = context()->nat_table->lookup(context()->nat_table, entry->leaf.sid);
-        if(node){
-            if(!node->data){
-                return 0;
-            }
-            addr = (struct nat_addr*)node->data;
+    if(node){
+        if(!node->data){
+            return 0;
+        }
+        addr = (struct nat_addr*)node->data;
+        if(point == PACKET_POINT_LOGIN){
             ret = addr->redirect_daddr;
         }
+        if(point == PACKET_POINT_END_OF_TUNNEL){
+            ret = addr->original_daddr;
+        }
     }
-    if(ret != 0){
-        LOGI("[%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]=>[%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]\n",
-             (tuple->saddr>>24)&0xFF,(tuple->saddr>>16)&0xFF,(tuple->saddr>>8)&0xFF,(tuple->saddr>>0)&0xFF, tuple->source,
-             (tuple->daddr>>24)&0xFF,(tuple->daddr>>16)&0xFF,(tuple->daddr>>8)&0xFF,(tuple->daddr>>0)&0xFF, tuple->dest,
-             (tuple->saddr>>24)&0xFF,(tuple->saddr>>16)&0xFF,(tuple->saddr>>8)&0xFF,(tuple->saddr>>0)&0xFF, tuple->source,
-             (ret >> 0)&0xFF, (ret >> 8)&0xF, (ret >> 16)&0xFF, (ret >> 24)&0xFF, tuple->dest);
-    }
-
     return ret;
 }
 
@@ -277,6 +266,7 @@ static struct identity_entry* save(struct identity_hashtable *table,
     }
     entry->leaf.sid = sid;
     entry->leaf.code = code;
+    entry->login_node = true;
     table->add(table, entry);
     return entry;
 }
@@ -290,7 +280,7 @@ static void revert(const struct net_tuple *src, struct net_tuple *dest){
 }
 struct identity_entry* cache_identity(const struct net_tuple *tuple,
                     const struct yulong_header* header,
-                    bool is_published){
+                    bool is_end_of_tunnel){
     struct identity_hashtable *egress_table = context()->egress_id_hashtable;
     struct identity_hashtable *ingress_table = context()->ingress_id_hashtable;
     struct identity_entry *entry = NULL;
@@ -309,7 +299,7 @@ struct identity_entry* cache_identity(const struct net_tuple *tuple,
         entry->leaf.code = header->leaf_code;
     }else{
         if(header->packet_type == PACKET_TYPE_OUTBOUND){
-            if(is_published){
+            if(is_end_of_tunnel){
                 struct net_tuple revert_tuple = {0};
                 revert(tuple, &revert_tuple);
                 entry = ingress_table->lookup(ingress_table,

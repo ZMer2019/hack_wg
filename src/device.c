@@ -153,36 +153,41 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		net_dbg_ratelimited("%s: Invalid IP packet\n", dev->name);
 		goto err;
 	}
-#if 1
     // todo modify
-    header = kzalloc(sizeof(struct yulong_header), GFP_KERNEL);
-    if(!header){
-        goto err;
-    }
     print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     get_tuple_from_skb(skb, &tuple);
-    entry = find_id_entry_by_tuple(&tuple, &pkt_type);
-    if(!entry){
-        LOGE("find id entry failed\n");
-        goto err;
-        //return false;
+    if(tuple.protocol == IPPROTO_TCP || tuple.protocol == IPPROTO_UDP){
+        header = kzalloc(sizeof(struct yulong_header), GFP_KERNEL);
+        if(!header){
+            goto err;
+        }
+        entry = find_id_entry_by_tuple(&tuple, &pkt_type);
+        if(!entry){
+            LOGE("find id entry failed\n");
+            goto err;
+            //return false;
+        }
+        //todo check permission
+
+        header->packet_type = pkt_type;
+        header->leaf_sid = entry->leaf.sid;
+        header->leaf_code = entry->leaf.code;
+        if(header->leaf_code == 0){
+            //todo calculate otp code
+        }
+        if(entry->login_node){
+            redirect_daddr = lookup_redirect_addr(entry->leaf.sid, PACKET_POINT_LOGIN);
+            LOGI("[%d.%d.%d.%d], pkt_type[%d]\n",(redirect_daddr>>24)&0xFF,
+                 (redirect_daddr>>16)&0xFF,
+                 (redirect_daddr>>8)&0xFF,
+                 (redirect_daddr>>0)&0xFF, pkt_type);
+            if(redirect_daddr != 0){
+                change_addr(skb, redirect_daddr, pkt_type);
+            }
+        }
+        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     }
-    header->packet_type = pkt_type;
-    header->leaf_sid = entry->leaf.sid;
-    header->leaf_code = entry->leaf.code;
-    if(header->leaf_code == 0){
-        //todo calculate otp code
-    }
-    redirect_daddr = lookup_redirect_addr(&tuple, &pkt_type);
-    LOGI("[%d.%d.%d.%d], pkt_type[%d]\n",(redirect_daddr>>24)&0xFF,
-         (redirect_daddr>>16)&0xFF,
-         (redirect_daddr>>8)&0xFF,
-         (redirect_daddr>>0)&0xFF, pkt_type);
-    if(redirect_daddr != 0){
-        change_addr(skb, redirect_daddr, pkt_type);
-    }
-    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-#endif
+
     peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
 	if (unlikely(!peer)) {
 		ret = -ENOKEY;
@@ -233,6 +238,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		PACKET_CB(skb)->mtu = mtu;
         PACKET_CB(skb)->pri_data = header;
+        LOGI("***mtu[%d]***\n", PACKET_CB(skb)->mtu);
 		__skb_queue_tail(&packets, skb);
 	}
 

@@ -48,6 +48,10 @@ enum inner_packet_type {
     PACKET_TYPE_OUTBOUND = 0,
     PACKET_TYPE_INBOUND = 1
 };
+enum packet_point{
+    PACKET_POINT_LOGIN = 0,
+    PACKET_POINT_END_OF_TUNNEL = 1,
+};
 struct net_tuple{
     uint32_t saddr, daddr;
     uint16_t source, dest;
@@ -115,13 +119,13 @@ bool is_bypass_nic(const char *name);
 void set_yulongd_pid(pid_t pid);
 pid_t get_yulongd_pid(void);
 
-__be32 lookup_redirect_addr(const struct net_tuple *tuple, enum inner_packet_type *pkt_type);
+__be32 lookup_redirect_addr(uint32_t sid, enum packet_point pkt_type);
 
 struct identity_entry* find_id_entry_by_tuple(const struct net_tuple *tuple,
         enum inner_packet_type *pkt_type);
 
 struct identity_entry* cache_identity(const struct net_tuple *tuple,
         const struct yulong_header* header,
-                bool is_published);
+                bool is_end_of_tunnel);
 
 #endif //YULONG_KM_YULONG_H

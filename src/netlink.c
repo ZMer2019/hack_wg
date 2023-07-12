@@ -60,6 +60,8 @@ static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
         [WGACL_A_NIC_NAME] = {.type = NLA_STRING, .len = IFNAMSIZ},
         [WGACL_A_NEW_DADDR] = {.type = NLA_U32},
         [WGACL_A_REDIRECT] = {.type = NLA_U8},
+        [WGACL_A_ORIGINAL_DADDR] = {.type = NLA_U32},
+        [WGACL_A_REDIRECT_DADDR] = {.type = NLA_U32},
 };
 
 static const struct nla_policy peer_policy[WGPEER_A_MAX + 1] = {
@@ -658,7 +660,45 @@ static int netlink_yulong_init(struct sk_buff *skb, struct genl_info *info){
             comm_id, communication_pid, info->snd_portid);
     return 0;
 }
-
+static int netlink_redirect_addr_response(struct sk_buff *skb, struct genl_info *info){
+    uint32_t sid;
+    uint32_t original_daddr, redirect_daddr;
+    int request_seq = -1;
+    struct nat_addr *addr;
+    if(!info->attrs[WGACL_A_SEQ] ||
+    !info->attrs[WGACL_A_ORIGINAL_DADDR]||
+    !info->attrs[WGACL_A_UUID] ||
+    !info->attrs[WGACL_A_REDIRECT_DADDR]){
+        if(info->attrs[WGACL_A_SEQ]){
+            LOGI("seq[%d]", nla_get_s32(info->attrs[WGACL_A_SEQ]));
+            request_seq = nla_get_s32(info->attrs[WGACL_A_SEQ]);
+            login_wakeup(request_seq);
+        }
+        LOGI("set nat addr failed\n");
+        return 0;
+    }
+    request_seq = nla_get_s32(info->attrs[WGACL_A_SEQ]);
+    original_daddr = nla_get_u32(info->attrs[WGACL_A_ORIGINAL_DADDR]);
+    redirect_daddr = nla_get_u32(info->attrs[WGACL_A_REDIRECT_DADDR]);
+    sid = nla_get_u32(info->attrs[WGACL_A_UUID]);
+    addr = kzalloc(sizeof(struct nat_addr), GFP_KERNEL);
+    if(addr){
+        addr->original_daddr = original_daddr;
+        addr->redirect_daddr = redirect_daddr;
+        LOGI("sid[%d],redirect_daddr[%d.%d.%d.%d]\n", sid,(addr->redirect_daddr>>24)&0xFF,
+             (addr->redirect_daddr>>16)&0xFF,
+             (addr->redirect_daddr>>8)&0xFF,
+             (addr->redirect_daddr>>0)&0xFF)
+        context()->nat_table->insert(context()->nat_table, sid, addr);
+    }else{
+        LOGE("save nat info for sid[%d] error\n", sid);
+    }
+    LOGI("save nat info for sid[%d],original[%d.%d.%d.%d],redirect[%d.%d.%d.%d]\n", sid,
+         (original_daddr>>24&0xFF),(original_daddr>>16&0xFF),(original_daddr>>8&0xFF),(original_daddr>>0&0xFF),
+         (redirect_daddr>>24&0xFF),(redirect_daddr>>16&0xFF),(redirect_daddr>>8&0xFF),(redirect_daddr>>0&0xFF));
+    login_wakeup(request_seq);
+    return 0;
+}
 static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
     uint32_t daddr, redirect_daddr;
     uint16_t source, dest;
@@ -727,6 +767,7 @@ static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
             entry->leaf.sid = sid;
             entry->leaf.code = 0;
             entry->type = PROTOCOL_TYPE_YULONG;
+            entry->login_node = true;
             memcpy(entry->leaf.otp_key, otp_key, OTP_KEY_LEN);
             context()->egress_id_hashtable->add(context()->egress_id_hashtable, entry);
             LOGI("%d.%d.%d.%d:%d->%d.%d.%d.%d:%d\n",
@@ -794,6 +835,9 @@ struct genl_ops genl_ops[] = {
     },{
         .cmd = WG_CMD_HOOK_LOGIN_RESPONSE,
         .doit = netlink_login_response,
+    },{
+        .cmd = WG_CMD_REDIRECT_ADDR_RESPONSE,
+        .doit = netlink_redirect_addr_response,
     }
 };
 

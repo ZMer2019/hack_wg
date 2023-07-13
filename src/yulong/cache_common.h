@@ -138,7 +138,7 @@ struct identity_entry{
     //struct identity_info node;
     uint64_t timestamp;
     enum protocol_type type;
-    bool login_node;
+    bool need_modify_addr;
 };
 struct identity_hashtable{
     DECLARE_HASHTABLE(hashtable, 15);

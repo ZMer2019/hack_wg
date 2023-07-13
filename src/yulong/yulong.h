@@ -132,6 +132,6 @@ int login_data_mock(pid_t pid, uint64_t start_time,
                     uint16_t source, uint32_t daddr,
                     uint16_t dest,uint8_t protocol);
 struct identity_entry *cache_identity2(struct identity_hashtable *table, uint32_t saddr, uint32_t daddr,
-                                       uint16_t source, uint16_t dest, uint8_t protocol,uint32_t sid, bool is_login_node,
+                                       uint16_t source, uint16_t dest, uint8_t protocol,uint32_t sid, bool need_modify_addr,
                                        const char *otp_key_len);
 #endif //YULONG_KM_YULONG_H

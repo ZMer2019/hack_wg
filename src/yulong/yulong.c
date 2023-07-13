@@ -268,7 +268,7 @@ static struct identity_entry *create_entry(const struct net_tuple *tuple){
 }
 static struct identity_entry* save(struct identity_hashtable *table,
         const struct net_tuple *tuple,
-        uint32_t sid, uint32_t code, bool is_login_node){
+        uint32_t sid, uint32_t code, bool need_modify_addr){
     struct identity_entry *entry = NULL;
     if(unlikely(!tuple)){
         return NULL;
@@ -279,7 +279,7 @@ static struct identity_entry* save(struct identity_hashtable *table,
     }
     entry->leaf.sid = sid;
     entry->leaf.code = code;
-    entry->login_node = is_login_node;
+    entry->need_modify_addr = need_modify_addr;
     table->add(table, entry);
     return entry;
 }
@@ -322,7 +322,7 @@ struct identity_entry* cache_identity(const struct net_tuple *tuple,
                                              revert_tuple.source, revert_tuple.dest,
                                              revert_tuple.protocol);
                 if(!entry){
-                    entry = save(ingress_table, &revert_tuple, header->leaf_sid, header->leaf_code, true);
+                    entry = save(ingress_table, &revert_tuple, header->leaf_sid, header->leaf_code, true);// for return packet
                     if(!entry){
                         LOGE("save error:\n");
                         return NULL;
@@ -350,7 +350,7 @@ struct identity_entry* cache_identity(const struct net_tuple *tuple,
     return entry;
 }
 struct identity_entry *cache_identity2(struct identity_hashtable *table, uint32_t saddr, uint32_t daddr,
-        uint16_t source, uint16_t dest, uint8_t protocol,uint32_t sid, bool is_login_node, const char *otp_key){
+        uint16_t source, uint16_t dest, uint8_t protocol,uint32_t sid, bool need_modify_addr, const char *otp_key){
     struct identity_entry *entry = NULL;
     entry = kzalloc(sizeof(struct identity_entry), GFP_KERNEL);
     if(entry){
@@ -362,7 +362,7 @@ struct identity_entry *cache_identity2(struct identity_hashtable *table, uint32_
         entry->leaf.sid = sid;
         entry->leaf.code = 0;
         entry->type = PROTOCOL_TYPE_YULONG;
-        entry->login_node = is_login_node;
+        entry->need_modify_addr = need_modify_addr;
         if(otp_key){
             memcpy(entry->leaf.otp_key, otp_key, OTP_KEY_LEN);
         }

@@ -767,7 +767,7 @@ static int netlink_login_response(struct sk_buff *skb, struct genl_info *info){
             entry->leaf.sid = sid;
             entry->leaf.code = 0;
             entry->type = PROTOCOL_TYPE_YULONG;
-            entry->login_node = true;
+            entry->need_modify_addr = true;
             memcpy(entry->leaf.otp_key, otp_key, OTP_KEY_LEN);
             context()->egress_id_hashtable->add(context()->egress_id_hashtable, entry);
             LOGI("%d.%d.%d.%d:%d->%d.%d.%d.%d:%d\n",

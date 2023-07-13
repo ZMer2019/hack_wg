@@ -171,7 +171,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
             //todo calculate otp code
         //}
 
-        if(entry->login_node){
+        if(entry->need_modify_addr){
             redirect_daddr = lookup_redirect_addr(entry->leaf.sid, PACKET_POINT_LOGIN);
 #if 0
             LOGI("[%d.%d.%d.%d], pkt_type[%d]\n",(redirect_daddr>>24)&0xFF,

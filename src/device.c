@@ -156,6 +156,11 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 #if 1
     //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     get_tuple_from_skb(skb, &tuple);
+#if 0
+    LOGE("before [%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]\n",
+         (tuple.saddr>>24&0xFF),(tuple.saddr>>16&0xFF),(tuple.saddr>>8&0xFF),(tuple.saddr>>0&0xFF),tuple.source,
+         (tuple.daddr>>24&0xFF),(tuple.daddr>>16&0xFF),(tuple.daddr>>8&0xFF),(tuple.daddr>>0&0xFF),tuple.dest);
+#endif
     if(tuple.protocol == IPPROTO_TCP || tuple.protocol == IPPROTO_UDP){
         entry = find_id_entry_by_tuple(&tuple, &pkt_type);
         if(!entry){
@@ -183,7 +188,13 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
                 change_addr(skb, redirect_daddr, pkt_type);
             }
         }
-        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+        get_tuple_from_skb(skb, &tuple);
+#if 0
+        LOGE("after [%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]\n",
+             (tuple.saddr>>24&0xFF),(tuple.saddr>>16&0xFF),(tuple.saddr>>8&0xFF),(tuple.saddr>>0&0xFF),tuple.source,
+             (tuple.daddr>>24&0xFF),(tuple.daddr>>16&0xFF),(tuple.daddr>>8&0xFF),(tuple.daddr>>0&0xFF),tuple.dest);
+#endif
+        //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     }
 #endif
     peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);

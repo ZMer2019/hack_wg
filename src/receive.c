@@ -300,6 +300,12 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 		return false;
 
     //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+#if 0
+    get_tuple_from_skb(skb, &tuple);
+    LOGE("before [%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]\n",
+         (tuple.saddr>>24&0xFF),(tuple.saddr>>16&0xFF),(tuple.saddr>>8&0xFF),(tuple.saddr>>0&0xFF),tuple.source,
+         (tuple.daddr>>24&0xFF),(tuple.daddr>>16&0xFF),(tuple.daddr>>8&0xFF),(tuple.daddr>>0&0xFF),tuple.dest);
+#endif
     ip = (struct iphdr*)skb->data;
     yl_header = (struct yulong_header*)(skb->data + be16_to_cpu(ip->tot_len));
     if(yl_header->magic_id == MAGIC_ID){
@@ -332,6 +338,11 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
         }
 #if 1
         get_tuple_from_skb(skb, &tuple);
+#if 0
+        LOGE("after [%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]\n",
+             (tuple.saddr>>24&0xFF),(tuple.saddr>>16&0xFF),(tuple.saddr>>8&0xFF),(tuple.saddr>>0&0xFF),tuple.source,
+             (tuple.daddr>>24&0xFF),(tuple.daddr>>16&0xFF),(tuple.daddr>>8&0xFF),(tuple.daddr>>0&0xFF),tuple.dest);
+#endif
         if(tuple.protocol == IPPROTO_UDP || tuple.protocol == IPPROTO_TCP){
             if(tuple.syn ==1){
                 entry = cache_identity(&tuple, yl_header, is_end_of_tunnel);

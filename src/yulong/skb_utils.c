@@ -143,7 +143,7 @@ int skb_store_bytes(struct sk_buff *skb, u32 offset,
 
     if(unlikely(offset > INT_MAX))
         return -EFAULT;
-#if 1
+#if 0
     if(unlikely(try_make_writable(skb, offset + len)))
         return -EFAULT;
 #endif
@@ -351,13 +351,15 @@ void change_addr(struct sk_buff *skb, uint32_t addr, enum inner_packet_type pkt_
     addr = htonl(addr);
 
     if(pkt_type == PACKET_TYPE_OUTBOUND){
+        iph->daddr = addr;
         //uint32_t ori = iph->daddr;
         //csum_replace4(&sum, ori, addr);
-        skb_store_bytes(skb, L3_DADDR_OFFSET, &addr, sizeof(__be32));
+        //skb_store_bytes(skb, L3_DADDR_OFFSET, &addr, sizeof(__be32));
         //skb_store_bytes(skb, L4_TCP_CSUM_OFFSET, &sum, sizeof(__sum16));
     }
     if(pkt_type == PACKET_TYPE_INBOUND){
-        skb_store_bytes(skb, L3_SADDR_OFFSET, &addr, sizeof(__be32));
+        iph->saddr = addr;
+        //skb_store_bytes(skb, L3_SADDR_OFFSET, &addr, sizeof(__be32));
     }
     ip_send_check(iph);
 }

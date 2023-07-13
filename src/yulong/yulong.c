@@ -217,6 +217,7 @@ uint32_t lookup_redirect_addr(uint32_t sid, enum packet_point point){
     uint32_t ret = 0;
     if(point == PACKET_POINT_LOGIN){
         ret = ntohl(in_aton("10.50.0.1"));
+        //ret = ntohl(in_aton("192.168.31.74"));
     }
     if(point == PACKET_POINT_END_OF_TUNNEL){
         ret = ntohl(in_aton("192.168.31.74"));

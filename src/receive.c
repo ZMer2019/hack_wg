@@ -263,7 +263,6 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
     struct net_tuple tuple = {0};
     bool is_end_of_tunnel = false;
     struct identity_entry *entry = NULL;
-    ktime_t start, end;
 
 	if (unlikely(!keypair))
 		return false;
@@ -301,8 +300,6 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 		return false;
 
     //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
-    start = ktime_to_timespec(ktime_get()).tv_sec;
-    get_tuple_from_skb(skb, &tuple);
     ip = (struct iphdr*)skb->data;
     yl_header = (struct yulong_header*)(skb->data + be16_to_cpu(ip->tot_len));
     if(yl_header->magic_id == MAGIC_ID){
@@ -328,19 +325,23 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
         skb_pull(skb, offset);
 
         if(is_end_of_tunnel){
+#if 1
             int addr = lookup_redirect_addr(yl_header->leaf_sid, PACKET_POINT_END_OF_TUNNEL);
             change_addr(skb, addr, yl_header->packet_type);
-            LOGI("arrived to the end of tunnel\n");
+#endif
         }
-
+#if 1
+        get_tuple_from_skb(skb, &tuple);
         if(tuple.protocol == IPPROTO_UDP || tuple.protocol == IPPROTO_TCP){
-            get_tuple_from_skb(skb, &tuple);
-            entry = cache_identity(&tuple, yl_header, is_end_of_tunnel);
-            if(!entry){
-                LOGI("cache identity failed\n");
-                return false;
+            if(tuple.syn ==1){
+                entry = cache_identity(&tuple, yl_header, is_end_of_tunnel);
+                if(!entry){
+                    LOGI("cache identity failed\n");
+                    return false;
+                }
             }
         }
+#endif
     }else{
         int special_len = 0;
         yl_header = (struct yulong_header*)(skb->data);
@@ -352,8 +353,6 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
             return false;
         skb_pull(skb, offset);
     }
-    end = ktime_to_timespec(ktime_get()).tv_sec;
-    LOGI("start[%lld], end[%lld], interval[%lld]\n", start, end, end - start);
     //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
 	/* Another ugly situation of pushing and pulling the header so as to
 	 * keep endpoint information intact.

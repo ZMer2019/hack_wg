@@ -12,6 +12,7 @@
 #include "log.h"
 #include "yulongnl.h"
 #include "yulong.h"
+#include "skb_utils.h"
 PT_REGS_SYSCALL_FUNC sys_org_connect;
 
 void switch_hooked_connect(struct system_map *org_system_call_table) {
@@ -122,23 +123,19 @@ asmlinkage long hooked_connect(const struct pt_regs* res){
         //start = ktime_get();
         login_entry = context()->login_hashtable->lookup(context()->login_hashtable, tgid, tuple.daddr, tuple.dest, tuple.protocol);
         if(!login_entry){
+            login_data_mock(tgid, 0, tuple.source, tuple.daddr, tuple.dest, tuple.protocol);
+#if 0
             netlink_login_request(tgid, 0, tuple.source, tuple.daddr,
                                         tuple.dest, tuple.protocol, get_yulongd_pid());
+#endif
         }else{
-            entry = context()->egress_id_hashtable->lookup(context()->egress_id_hashtable, wg_virtual_local_addr(), tuple.daddr, tuple.source,
+            entry = context()->egress_id_hashtable->lookup(context()->egress_id_hashtable, get_virtual_local_ip(), tuple.daddr, tuple.source,
                                                            tuple.dest, tuple.protocol);
             if(!entry){
-                entry = kzalloc(sizeof(struct identity_entry), GFP_KERNEL);
-                if(entry){
-                    entry->key.saddr = wg_virtual_local_addr();
-                    entry->key.daddr = tuple.daddr;
-                    entry->key.source = tuple.source;
-                    entry->key.dest = tuple.dest;
-                    entry->key.protocol = tuple.protocol;
-                    entry->leaf.sid = login_entry->identity.sid;
-                    memcpy(entry->leaf.otp_key, login_entry->identity.otp_key, OTP_KEY_LEN);
-                    context()->egress_id_hashtable->add(context()->egress_id_hashtable, entry);
-                }
+                cache_identity2(context()->egress_id_hashtable, get_virtual_local_ip(), tuple.daddr,
+                                tuple.source, tuple.dest, tuple.protocol, login_entry->identity.sid,
+                                true, login_entry->identity.otp_key);
+
             }else{
                 entry->leaf.sid = login_entry->identity.sid;
                 entry->timestamp = ktime_to_timespec(ktime_get()).tv_sec;

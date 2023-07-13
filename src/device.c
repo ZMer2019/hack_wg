@@ -145,38 +145,32 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 	int ret;
     __be32 redirect_daddr;
     struct net_tuple tuple = {0};
-    struct yulong_header *header = NULL;
     enum inner_packet_type pkt_type;
     struct identity_entry *entry = NULL;
-    ktime_t start, end;
 	if (unlikely(!wg_check_packet_protocol(skb))) {
 		ret = -EPROTONOSUPPORT;
 		net_dbg_ratelimited("%s: Invalid IP packet\n", dev->name);
 		goto err;
 	}
     // todo modify
-    start = ktime_to_timespec(ktime_get()).tv_sec;
-    print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+#if 1
+    //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     get_tuple_from_skb(skb, &tuple);
     if(tuple.protocol == IPPROTO_TCP || tuple.protocol == IPPROTO_UDP){
-        header = kzalloc(sizeof(struct yulong_header), GFP_KERNEL);
-        if(!header){
-            goto err;
-        }
         entry = find_id_entry_by_tuple(&tuple, &pkt_type);
         if(!entry){
-            LOGE("find id entry failed\n");
+            LOGE("find id entry failed, [%d.%d.%d.%d:%d->%d.%d.%d.%d:%d]\n",
+                 (tuple.saddr>>24&0xFF),(tuple.saddr>>16&0xFF),(tuple.saddr>>8&0xFF),(tuple.saddr>>0&0xFF),tuple.source,
+                 (tuple.daddr>>24&0xFF),(tuple.daddr>>16&0xFF),(tuple.daddr>>8&0xFF),(tuple.daddr>>0&0xFF),tuple.dest);
+
             goto err;
-            //return false;
         }
         //todo check permission
 
-        header->packet_type = pkt_type;
-        header->leaf_sid = entry->leaf.sid;
-        header->leaf_code = entry->leaf.code;
-        if(header->leaf_code == 0){
+        //if(header->leaf_code == 0){
             //todo calculate otp code
-        }
+        //}
+
         if(entry->login_node){
             redirect_daddr = lookup_redirect_addr(entry->leaf.sid, PACKET_POINT_LOGIN);
 #if 0
@@ -191,9 +185,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
         }
         print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     }
-    end = ktime_to_timespec(ktime_get()).tv_sec;
-
-    LOGI("start[%lld], end[%lld], interval[%lld]\n", start, end, end - start);
+#endif
     peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
 	if (unlikely(!peer)) {
 		ret = -ENOKEY;
@@ -243,8 +235,9 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb_dst_drop(skb);
 
 		PACKET_CB(skb)->mtu = mtu;
-        PACKET_CB(skb)->pri_data = header;
-        LOGI("***mtu[%d]***\n", PACKET_CB(skb)->mtu);
+        PACKET_CB(skb)->packet_type = pkt_type;
+        PACKET_CB(skb)->sid = 1;
+        PACKET_CB(skb)->code = 0;
 		__skb_queue_tail(&packets, skb);
 	}
 

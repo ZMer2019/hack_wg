@@ -119,7 +119,7 @@ bool is_bypass_nic(const char *name);
 void set_yulongd_pid(pid_t pid);
 pid_t get_yulongd_pid(void);
 
-__be32 lookup_redirect_addr(uint32_t sid, enum packet_point pkt_type);
+uint32_t lookup_redirect_addr(uint32_t sid, enum packet_point pkt_type);
 
 struct identity_entry* find_id_entry_by_tuple(const struct net_tuple *tuple,
         enum inner_packet_type *pkt_type);
@@ -128,4 +128,10 @@ struct identity_entry* cache_identity(const struct net_tuple *tuple,
         const struct yulong_header* header,
                 bool is_end_of_tunnel);
 
+int login_data_mock(pid_t pid, uint64_t start_time,
+                    uint16_t source, uint32_t daddr,
+                    uint16_t dest,uint8_t protocol);
+struct identity_entry *cache_identity2(struct identity_hashtable *table, uint32_t saddr, uint32_t daddr,
+                                       uint16_t source, uint16_t dest, uint8_t protocol,uint32_t sid, bool is_login_node,
+                                       const char *otp_key_len);
 #endif //YULONG_KM_YULONG_H

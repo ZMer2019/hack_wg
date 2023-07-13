@@ -57,12 +57,15 @@ enum packet_state {
 };
 
 struct packet_cb {
-	u64 nonce;
-	struct noise_keypair *keypair;
-	atomic_t state;
-	u32 mtu;
-	u8 ds;
-    void *pri_data;
+	u64 nonce;//8
+	struct noise_keypair *keypair;//8
+	atomic_t state;//4
+	u32 mtu;//4
+	u8 ds;//1
+    u8 packet_type;
+    uint32_t sid;
+    uint32_t code;
+    uint32_t timestamp;
 };
 
 #define PACKET_CB(skb) ((struct packet_cb *)((skb)->cb))

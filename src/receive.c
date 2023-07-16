@@ -334,6 +334,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 #if 1
             int addr = lookup_redirect_addr(yl_header->leaf_sid, PACKET_POINT_END_OF_TUNNEL);
             change_addr(skb, addr, yl_header->packet_type);
+            //skb_checksum_setup(skb, true);
 #endif
         }
 #if 1

@@ -9,7 +9,7 @@ add_definitions(-DYULONG)
 
 add_definitions(-D__LOCAL_TEST__)
 set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
-set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.test.001")
+set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.zzz")
 
 include_directories(BEFORE SYSTEM ${kernel_base}/include)
 include_directories(BEFORE SYSTEM ${kernel_base}/arch/x86/include/)
@@ -84,7 +84,6 @@ add_library(yulong_km
         src/compat/dstmetadata/include/net/dst_metadata.h
         src/compat/compat.h
         src/compat/compat-asm.h
-        src/compat/checksum/checksum_partial_compat.h
         src/compat/siphash/include/linux/siphash.h
         src/compat/fpu-x86/include/asm/fpu/api.h
         src/peer.h

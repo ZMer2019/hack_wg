@@ -154,6 +154,9 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto err;
 	}
     // todo modify
+
+    //skb = skb_copy(skb, GFP_KERNEL);
+
 #if 1
     //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     get_tuple_from_skb(skb, &tuple);
@@ -179,7 +182,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 
         if(entry->need_modify_addr){
             redirect_daddr = lookup_redirect_addr(entry->leaf.sid, PACKET_POINT_LOGIN);
-#if 1
+#if 0
             LOGI("[%d.%d.%d.%d], pkt_type[%d]\n",(redirect_daddr>>24)&0xFF,
                  (redirect_daddr>>16)&0xFF,
                  (redirect_daddr>>8)&0xFF,
@@ -195,7 +198,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
              (tuple.saddr>>24&0xFF),(tuple.saddr>>16&0xFF),(tuple.saddr>>8&0xFF),(tuple.saddr>>0&0xFF),tuple.source,
              (tuple.daddr>>24&0xFF),(tuple.daddr>>16&0xFF),(tuple.daddr>>8&0xFF),(tuple.daddr>>0&0xFF),tuple.dest);
 #endif
-        print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
+        //print_binary(skb->data, skb->len, __FUNCTION__ , __LINE__);
     }
 #endif
     peer = wg_allowedips_lookup_dst(&wg->peer_allowedips, skb);
@@ -210,7 +213,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto err_icmp;
 	}
     server_addr = ntohl(peer->endpoint.addr4.sin_addr.s_addr);
-    LOGI("server addr[%d.%d.%d.%d]\n", (server_addr>>24)&0xFF,(server_addr>>16)&0xFF,(server_addr>>8)&0xFF,(server_addr>>0)&0xFF);
+    //LOGI("server addr[%d.%d.%d.%d]\n", (server_addr>>24)&0xFF,(server_addr>>16)&0xFF,(server_addr>>8)&0xFF,(server_addr>>0)&0xFF);
 	family = READ_ONCE(peer->endpoint.addr.sa_family);
 	if (unlikely(family != AF_INET && family != AF_INET6)) {
 		ret = -EDESTADDRREQ;
@@ -249,7 +252,9 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		PACKET_CB(skb)->mtu = mtu;
         PACKET_CB(skb)->packet_type = pkt_type;
-        PACKET_CB(skb)->sid = entry->leaf.sid;
+        if(tuple.protocol == IPPROTO_TCP || tuple.protocol == IPPROTO_UDP){
+            PACKET_CB(skb)->sid = entry->leaf.sid;
+        }
         PACKET_CB(skb)->code = 0;
 		__skb_queue_tail(&packets, skb);
 	}

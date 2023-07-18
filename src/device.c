@@ -24,6 +24,8 @@
 #include <net/rtnetlink.h>
 #include <net/ip_tunnels.h>
 #include <net/addrconf.h>
+#include <linux/netfilter.h>
+#include <net/netfilter/nf_conntrack.h>
 #include "skb_utils.h"
 #include "yulong.h"
 static LIST_HEAD(device_list);

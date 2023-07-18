@@ -6,10 +6,11 @@ set(CMAKE_C_STANDARD 90)
 
 add_definitions(-D__KERNEL__)
 add_definitions(-DYULONG)
-
+add_definitions(-DCONFIG_NETFILTER)
 add_definitions(-D__LOCAL_TEST__)
 set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
-set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.zzz")
+#set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.zzz")
+set(kernel_base "~/rpmbuild/BUILD/kernel-4.19.248.test.001")
 
 include_directories(BEFORE SYSTEM ${kernel_base}/include)
 include_directories(BEFORE SYSTEM ${kernel_base}/arch/x86/include/)

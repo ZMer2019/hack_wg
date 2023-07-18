@@ -345,6 +345,14 @@ void set_virtual_local_ip(uint32_t local){
 uint32_t get_virtual_local_ip(void){
     return virtual_local_ip;
 }
+
+static void nat_ipv4_csum_update(struct sk_buff *skb,
+         __sum16 *check,
+        __be32 original_addr,
+        __be32 addr){
+    inet_proto_csum_replace4(check, skb, original_addr, addr, true);
+}
+
 void change_addr(struct sk_buff *skb, uint32_t addr, enum inner_packet_type pkt_type){
     struct iphdr *iph = (struct iphdr*)skb->data;
     struct tcphdr *tcph = (struct tcphdr*)(skb->data + (iph->ihl << 2));
@@ -352,12 +360,14 @@ void change_addr(struct sk_buff *skb, uint32_t addr, enum inner_packet_type pkt_
 
     if(pkt_type == PACKET_TYPE_OUTBOUND){
         //reset ip checksum
+        nat_ipv4_csum_update(skb, &tcph->check, iph->daddr, addr);
         csum_replace4(&iph->check, iph->daddr, addr);
         //csum_replace4(&tcph->check, iph->daddr, addr);
         skb_store_bytes(skb, L3_DADDR_OFFSET, &addr, sizeof(__be32));
         //skb_store_bytes(skb, L4_TCP_CSUM_OFFSET, &sum, sizeof(__sum16));
     }
     if(pkt_type == PACKET_TYPE_INBOUND){
+        nat_ipv4_csum_update(skb,&tcph->check, iph->saddr, addr);
         csum_replace4(&iph->check, iph->saddr, addr);
         //csum_replace4(&tcph->check, iph->saddr, addr);
         skb_store_bytes(skb, L3_SADDR_OFFSET, &addr, sizeof(__be32));

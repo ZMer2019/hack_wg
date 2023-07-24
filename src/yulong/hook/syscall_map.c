@@ -11,24 +11,28 @@
 int init_global_finder(struct symbol_finder *dacs_sym_finder) {
     //search for kernel symbols dynamicly
     int i;
+    int find = 0;
     unsigned long addr;
     char name[NAME_MAX];
-    for (i = -500; i < 500; ++i) {
+    for (i = -10; i < 10; ++i) {
         memset(name, 0, NAME_MAX);
-        addr = (unsigned long)sprint_symbol_no_offset + (i * sizeof(void *));
+        addr = (unsigned long)kallsyms_lookup_name + (i * sizeof(void *));
         sprint_symbol(name, addr);
+        LOGI("name[%s]\n", name);
         if (0 == strncmp(name, _KALLSYMS_LOOKUP_NAME, strlen(_KALLSYMS_LOOKUP_NAME))) {
             //set lookup functions to util
             dacs_sym_finder->find = (Lookup)addr;
-            //LOGI("kallsyms_lookup_name addr : %lx", (unsigned long)(dacs_sym_finder->find));
+            LOGI("kallsyms_lookup_name addr : %lx", (unsigned long)(dacs_sym_finder->find));
+            find = 1;
             break;
         }
     }
-    return 0;
+    return find;
 }
 
 int init_org_system_call_table(struct symbol_finder *dacs_sym_finder, struct system_map *org_system_call_table){
     if(!dacs_sym_finder->find){
+        LOGI("dacs_sym_finder->find is NULL\n");
         return -1;
     }
     org_system_call_table->addr = (unsigned long *)((dacs_sym_finder->find)("sys_call_table"));

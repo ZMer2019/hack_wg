@@ -22,7 +22,7 @@ int kernel_hook_init(void) {
     }
     memset(dacs_sym_finder, 0, sizeof(struct symbol_finder));
     memset(org_system_call_table, 0, sizeof(struct system_map));
-    if (init_global_finder(dacs_sym_finder)){
+    if (init_global_finder(dacs_sym_finder) == 0){
         LOGE("init dacs_sym_finder failed !\n");
         return -1;
     }
